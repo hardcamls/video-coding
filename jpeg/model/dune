@@ -1,0 +1,5 @@
+(library
+ (name hardcaml_jpeg_model)
+ (public_name hardcaml_video_codecs.jpeg_model)
+ (libraries base stdio)
+ (preprocess (pps ppx_jane)))

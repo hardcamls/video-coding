@@ -1,2 +1,4 @@
 # video-coding
-Video compression and decompression in hardware
+
+Video compression and decompression in hardware.
+
