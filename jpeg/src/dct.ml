@@ -17,23 +17,6 @@ open Signal
 (* The coefficients are in the range (-0.49, 0.49) so we dont need to store any
    fixed point integer bits. *)
 
-let even_idct_4pt_coefs =
-  Array.init 4 ~f:(fun i ->
-      let f j =
-        Float.(
-          0.5 * cos (((2. * Float.of_int i) + 1.) * (2. * Float.of_int j) * pi / 16.))
-      in
-      Float.[| 0.5 / sqrt 2.; f 1; f 2; f 3 |])
-;;
-
-let odd_idct_4pt_coefs =
-  Array.init 4 ~f:(fun j ->
-      Array.init 4 ~f:(fun i ->
-          Float.(
-            0.5
-            * cos (((2. * Float.of_int i) + 1.) * ((2. * Float.of_int j) + 1.) * pi / 16.))))
-;;
-
 let scale_coefs ~precision coefs =
   let scale_factor = Float.(2. ** of_int precision) in
   Array.map coefs ~f:(fun c ->

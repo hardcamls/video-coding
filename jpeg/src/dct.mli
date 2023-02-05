@@ -3,9 +3,6 @@
 open Base
 open Hardcaml
 
-val even_idct_4pt_coefs : float array array
-val odd_idct_4pt_coefs : float array array
-
 module Single_multiplier : sig
   val input_bits : int
   val transpose_bits : int

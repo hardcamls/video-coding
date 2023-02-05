@@ -300,7 +300,7 @@ let decode_component ~bits ~decoder ~(component : Component.t) ~blk_x ~blk_y =
              ~dc_tab:component.dc_tab
              ~ac_tab:component.ac_tab
              ~qnt_tab:component.quant_table;
-      Dct.inverse_dct_8x8 decoder.block;
+      Dct.Chen.inverse_8x8 decoder.block;
       (* Stdio.print_s [%message (decoder.block : block)]; *)
       (* let () = assert false in *)
       recon ~block:decoder.block ~plane:component.plane x_pos y_pos
