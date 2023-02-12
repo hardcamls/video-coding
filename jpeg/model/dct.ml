@@ -331,3 +331,54 @@ module Reference = struct
     ;;
   end
 end
+
+module Fixed_point = struct
+  let fixed_coefs ~fixed_prec coefs =
+    let fixed_scale = Float.(2. ** of_int fixed_prec) in
+    Array.map
+      coefs
+      ~f:(Array.map ~f:(fun c -> Float.(round_nearest (c * fixed_scale) |> to_int)))
+  ;;
+
+  (* tie away from 0 *)
+  let round x ~fixed_prec =
+    let half = 1 lsl (fixed_prec - 1) in
+    let floor x = x asr fixed_prec in
+    let ceil x = floor (x + ((1 lsl fixed_prec) - 1)) in
+    if x < 0 then ceil (x - half) else floor (x + half)
+  ;;
+
+  let mul a b =
+    Array.init 8 ~f:(fun row ->
+        Array.init 8 ~f:(fun col ->
+            let sum = ref 0 in
+            for k = 0 to 7 do
+              sum := !sum + (a.(row).(k) * b.(k).(col))
+            done;
+            !sum))
+  ;;
+
+  let round_matrix m ~prec =
+    if prec = 0
+    then m
+    else if prec < 0
+    then (
+      let prec = -prec in
+      Reference.Util.map m ~f:(fun x -> x lsl prec))
+    else Reference.Util.map m ~f:(round ~fixed_prec:prec)
+  ;;
+
+  let transform transform_matrix ~rom_prec ~transpose_prec inputs =
+    assert (rom_prec >= 0);
+    assert (transpose_prec >= 0);
+    let coefs = fixed_coefs ~fixed_prec:rom_prec transform_matrix in
+    let transpose = mul coefs inputs in
+    (* scale to new precision *)
+    let transpose = round_matrix transpose ~prec:(rom_prec - transpose_prec) in
+    let result = mul transpose (Reference.Util.transpose coefs) in
+    round_matrix result ~prec:(rom_prec + transpose_prec)
+  ;;
+
+  let forward_transform = transform Reference.Eight_point.forward_transform_matrix
+  let inverse_transform = transform Reference.Eight_point.inverse_transform_matrix
+end

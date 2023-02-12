@@ -41,3 +41,19 @@ module Reference : sig
     val inverse_transform : float matrix8x8 -> float matrix8x8
   end
 end
+
+module Fixed_point : sig
+  val round : int -> fixed_prec:int -> int
+
+  val forward_transform
+    :  rom_prec:int
+    -> transpose_prec:int
+    -> int array array
+    -> int array array
+
+  val inverse_transform
+    :  rom_prec:int
+    -> transpose_prec:int
+    -> int array array
+    -> int array array
+end

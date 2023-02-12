@@ -1,4 +1,5 @@
 (executables
- (names generate model)
+ (names generate model dct)
  (libraries core core_unix.command_unix hardcaml_jpeg_model hardcaml_jpeg)
- (preprocess (pps ppx_jane)))
+ (preprocess
+  (pps ppx_jane)))
