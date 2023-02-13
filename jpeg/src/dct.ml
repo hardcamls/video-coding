@@ -22,15 +22,13 @@ end
 module O = struct
   type 'a t =
     { pixel : 'a [@bits output_bits]
-    ; pixel_address : 'a [@bits 6]
     ; pixel_write : 'a
     ; transpose_coef_out : 'a [@bits transpose_bits]
-    ; transpose_write_address : 'a [@bits 6]
     ; transpose_write : 'a
-    ; coef_address : 'a [@bits 6]
     ; coef_read : 'a
-    ; transpose_read_address : 'a [@bits 6]
     ; transpose_read : 'a
+    ; read_address : 'a [@bits 6]
+    ; write_address : 'a [@bits 6]
     }
   [@@deriving sexp_of, hardcaml]
 end
@@ -139,23 +137,26 @@ let create scope (i : _ I.t) =
               ] )
           ]
       ]);
-  let coef_address = mux2 pass.value (x.value @: z.value) (z.value @: x.value) in
+  let read_address = mux2 pass.value (x.value @: z.value) (z.value @: x.value) in
   let read = sm.is Run in
   let write =
     let writing = z.value ==:. 7 in
     pipeline (Clocking.to_spec i.clocking) ~n:3 writing
   in
   let write_pass = pipeline (Clocking.to_spec i.clocking) ~n:3 pass.value in
-  let write_address = pipeline (Clocking.to_spec i.clocking) ~n:3 coef_address in
+  let write_address =
+    pipeline
+      (Clocking.to_spec i.clocking)
+      ~n:3
+      (mux2 pass.value (y.value @: x.value) (x.value @: y.value))
+  in
   { O.pixel = clipped_and_rounded_pixel
-  ; pixel_address = write_address
   ; pixel_write = write &: write_pass
   ; transpose_coef_out = rounded_transpose_coef
-  ; transpose_write_address = write_address
   ; transpose_write = write &: ~:write_pass
-  ; coef_address
   ; coef_read = read &: ~:(pass.value)
-  ; transpose_read_address = coef_address
   ; transpose_read = read &: pass.value
+  ; read_address
+  ; write_address
   }
 ;;

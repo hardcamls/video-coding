@@ -3,6 +3,10 @@
 open! Base
 open Hardcaml
 
+val input_bits : int
+val output_bits : int
+val transpose_bits : int
+
 module I : sig
   type 'a t =
     { clocking : 'a Clocking.t
@@ -16,15 +20,13 @@ end
 module O : sig
   type 'a t =
     { pixel : 'a
-    ; pixel_address : 'a
     ; pixel_write : 'a
     ; transpose_coef_out : 'a
-    ; transpose_write_address : 'a
     ; transpose_write : 'a
-    ; coef_address : 'a
     ; coef_read : 'a
-    ; transpose_read_address : 'a
     ; transpose_read : 'a
+    ; read_address : 'a
+    ; write_address : 'a
     }
   [@@deriving sexp_of, hardcaml]
 end

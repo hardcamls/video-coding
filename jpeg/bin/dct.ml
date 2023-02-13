@@ -225,6 +225,16 @@ let command_search =
         done]
 ;;
 
+let command_idct_hardware =
+  Command.basic
+    ~summary:""
+    [%map_open.Command
+      let () = return () in
+      fun () ->
+        let waves = Hardcaml_jpeg_test.Test_dct.(simulate_idct (create_inputs ())) in
+        Hardcaml_waveterm_interactive.run waves]
+;;
+
 let () =
   Command_unix.run
     (Command.group
@@ -233,5 +243,6 @@ let () =
        ; "inverse", command_inverse
        ; "both", command_both
        ; "search", command_search
+       ; "hardware", command_idct_hardware
        ])
 ;;

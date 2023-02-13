@@ -1,5 +1,11 @@
 (executables
  (names generate model dct)
- (libraries core core_unix.command_unix hardcaml_jpeg_model hardcaml_jpeg)
+ (libraries
+  core
+  core_unix.command_unix
+  hardcaml_jpeg_model
+  hardcaml_jpeg
+  hardcaml_jpeg_test
+  hardcaml_waveterm.interactive)
  (preprocess
   (pps ppx_jane)))
