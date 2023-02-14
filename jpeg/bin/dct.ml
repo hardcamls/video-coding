@@ -16,10 +16,8 @@ let transform
     inputs
   =
   let dct = fixed_transform ~rom_prec ~transpose_prec inputs in
-  let ref_dct = reference_transform (Dct.Reference.Util.map inputs ~f:Float.of_int) in
-  let error =
-    Dct.Reference.Util.map2 dct ref_dct ~f:(fun a b -> Float.(abs (of_int a - b)))
-  in
+  let ref_dct = reference_transform (Dct.Matrix8x8.map inputs ~f:Float.of_int) in
+  let error = Dct.Matrix8x8.map2 dct ref_dct ~f:(fun a b -> Float.(abs (of_int a - b))) in
   let max_error =
     Array.fold error ~init:0. ~f:(fun m a ->
         Array.fold a ~init:m ~f:(fun m a -> if Float.(abs a > m) then Float.abs a else m))
@@ -82,7 +80,7 @@ let command_forward =
               ~rom_prec
               ~transpose_prec
               ~fixed_transform:Dct.Fixed_point.forward_transform
-              ~reference_transform:Dct.Reference.Eight_point.forward_transform
+              ~reference_transform:Dct.Floating_point.Eight_point.forward_transform
               inputs
           in
           max_error := if Float.(error > !max_error) then error else !max_error
@@ -105,7 +103,7 @@ let command_inverse =
               ~rom_prec
               ~transpose_prec
               ~fixed_transform:Dct.Fixed_point.inverse_transform
-              ~reference_transform:Dct.Reference.Eight_point.inverse_transform
+              ~reference_transform:Dct.Floating_point.Eight_point.inverse_transform
               inputs
           in
           max_error := if Float.(error > !max_error) then error else !max_error
@@ -122,9 +120,9 @@ let forward_and_inverse
     inputs
   =
   let ref_dct =
-    Dct.Reference.Eight_point.forward_transform
-      (Dct.Reference.Util.map inputs ~f:Float.of_int)
-    |> Dct.Reference.Eight_point.inverse_transform
+    Dct.Floating_point.Eight_point.forward_transform
+      (Dct.Matrix8x8.map inputs ~f:Float.of_int)
+    |> Dct.Floating_point.Eight_point.inverse_transform
   in
   let fixed_dct =
     Dct.Fixed_point.forward_transform
@@ -136,14 +134,14 @@ let forward_and_inverse
          ~transpose_prec:inv_transpose_prec
   in
   let ref_error =
-    Dct.Reference.Util.map2 inputs ref_dct ~f:(fun a b -> Float.(abs (of_int a - b)))
+    Dct.Matrix8x8.map2 inputs ref_dct ~f:(fun a b -> Float.(abs (of_int a - b)))
   in
   let max_ref_error =
     Array.fold ref_error ~init:0. ~f:(fun m a ->
         Array.fold a ~init:m ~f:(fun m a -> if Float.(abs a > m) then Float.abs a else m))
   in
   let fixed_error =
-    Dct.Reference.Util.map2 inputs fixed_dct ~f:(fun a b -> Int.(abs (a - b)))
+    Dct.Matrix8x8.map2 inputs fixed_dct ~f:(fun a b -> Int.(abs (a - b)))
   in
   let max_fixed_error =
     Array.fold fixed_error ~init:0 ~f:(fun m a ->
@@ -229,9 +227,12 @@ let command_idct_hardware =
   Command.basic
     ~summary:""
     [%map_open.Command
-      let () = return () in
+      let seed = flag "-seed" (optional int) ~doc:"" in
       fun () ->
-        let waves = Hardcaml_jpeg_test.Test_dct.(simulate_idct (create_inputs ())) in
+        Option.iter seed ~f:Random.init;
+        let inputs = Hardcaml_jpeg_test.Test_dct.create_inputs () in
+        Hardcaml_jpeg_test.Test_dct.reference inputs;
+        let waves = Hardcaml_jpeg_test.Test_dct.(simulate_idct inputs) in
         Hardcaml_waveterm_interactive.run waves]
 ;;
 

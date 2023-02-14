@@ -196,31 +196,44 @@ module Chen = struct
   ;;
 end
 
-module Reference = struct
-  type 'a matrix8x8 = 'a array array
-  type 'a matrix4x4 = 'a array array
+module Matrix8x8 = struct
+  type 'a t = 'a array array [@@deriving sexp_of]
 
-  module Util = struct
-    let init f = Array.init 8 ~f:(fun row -> Array.init 8 ~f:(fun col -> f ~row ~col))
-    let transpose a = Array.init 8 ~f:(fun i -> Array.init 8 ~f:(fun j -> a.(j).(i)))
-    let map a ~f = Array.map a ~f:(Array.map ~f)
-    let map2 a b ~f = Array.map2_exn a b ~f:(Array.map2_exn ~f)
-    let mapi a ~f = Array.mapi a ~f:(fun row -> Array.mapi ~f:(fun col -> f ~row ~col))
-    let iter a ~f = Array.iter a ~f:(Array.iter ~f)
-    let iteri a ~f = Array.iteri a ~f:(fun row -> Array.iteri ~f:(fun col -> f ~row ~col))
+  let init f = Array.init 8 ~f:(fun row -> Array.init 8 ~f:(fun col -> f ~row ~col))
+  let transpose a = Array.init 8 ~f:(fun i -> Array.init 8 ~f:(fun j -> a.(j).(i)))
+  let map a ~f = Array.map a ~f:(Array.map ~f)
+  let map2 a b ~f = Array.map2_exn a b ~f:(Array.map2_exn ~f)
+  let mapi a ~f = Array.mapi a ~f:(fun row -> Array.mapi ~f:(fun col -> f ~row ~col))
+  let iter a ~f = Array.iter a ~f:(Array.iter ~f)
+  let iteri a ~f = Array.iteri a ~f:(fun row -> Array.iteri ~f:(fun col -> f ~row ~col))
 
-    let mul a b =
-      Array.init 8 ~f:(fun row ->
-          Array.init 8 ~f:(fun col ->
-              let sum = ref 0. in
-              for k = 0 to 7 do
-                sum := !sum +. (a.(row).(k) *. b.(k).(col))
-              done;
-              !sum))
-    ;;
-  end
+  let fmul a b =
+    Array.init 8 ~f:(fun row ->
+        Array.init 8 ~f:(fun col ->
+            let sum = ref 0. in
+            for k = 0 to 7 do
+              sum := !sum +. (a.(row).(k) *. b.(k).(col))
+            done;
+            !sum))
+  ;;
 
-  open Util
+  let imul a b =
+    Array.init 8 ~f:(fun row ->
+        Array.init 8 ~f:(fun col ->
+            let sum = ref 0 in
+            for k = 0 to 7 do
+              sum := !sum + (a.(row).(k) * b.(k).(col))
+            done;
+            !sum))
+  ;;
+end
+
+module Matrix4x4 = struct
+  type 'a t = 'a array array [@@deriving sexp_of]
+end
+
+module Floating_point = struct
+  open Matrix8x8
 
   module Eight_point = struct
     let forward_transform_matrix =
@@ -238,11 +251,11 @@ module Reference = struct
     let inverse_transform_matrix = transpose forward_transform_matrix
 
     let forward_transform a =
-      mul (mul forward_transform_matrix a) (transpose forward_transform_matrix)
+      fmul (fmul forward_transform_matrix a) (transpose forward_transform_matrix)
     ;;
 
     let inverse_transform a =
-      mul (mul inverse_transform_matrix a) (transpose inverse_transform_matrix)
+      fmul (fmul inverse_transform_matrix a) (transpose inverse_transform_matrix)
     ;;
   end
 
@@ -280,9 +293,9 @@ module Reference = struct
 
     let forward_transform t =
       Array.map t ~f:fdct_8pt_from_4pt
-      |> Util.transpose
+      |> Matrix8x8.transpose
       |> Array.map ~f:fdct_8pt_from_4pt
-      |> Util.transpose
+      |> Matrix8x8.transpose
     ;;
 
     let even_idct_4pt_coefs =
@@ -325,9 +338,9 @@ module Reference = struct
 
     let inverse_transform t =
       Array.map t ~f:idct_8pt_from_4pt
-      |> Util.transpose
+      |> Matrix8x8.transpose
       |> Array.map ~f:idct_8pt_from_4pt
-      |> Util.transpose
+      |> Matrix8x8.transpose
     ;;
   end
 end
@@ -348,37 +361,27 @@ module Fixed_point = struct
     if x < 0 then ceil (x - half) else floor (x + half)
   ;;
 
-  let mul a b =
-    Array.init 8 ~f:(fun row ->
-        Array.init 8 ~f:(fun col ->
-            let sum = ref 0 in
-            for k = 0 to 7 do
-              sum := !sum + (a.(row).(k) * b.(k).(col))
-            done;
-            !sum))
-  ;;
-
   let round_matrix m ~prec =
     if prec = 0
     then m
     else if prec < 0
     then (
       let prec = -prec in
-      Reference.Util.map m ~f:(fun x -> x lsl prec))
-    else Reference.Util.map m ~f:(round ~fixed_prec:prec)
+      Matrix8x8.map m ~f:(fun x -> x lsl prec))
+    else Matrix8x8.map m ~f:(round ~fixed_prec:prec)
   ;;
 
   let transform transform_matrix ~rom_prec ~transpose_prec inputs =
     assert (rom_prec >= 0);
     assert (transpose_prec >= 0);
     let coefs = fixed_coefs ~fixed_prec:rom_prec transform_matrix in
-    let transpose = mul coefs inputs in
+    let transpose = Matrix8x8.imul coefs inputs in
     (* scale to new precision *)
     let transpose = round_matrix transpose ~prec:(rom_prec - transpose_prec) in
-    let result = mul transpose (Reference.Util.transpose coefs) in
+    let result = Matrix8x8.imul transpose (Matrix8x8.transpose coefs) in
     round_matrix result ~prec:(rom_prec + transpose_prec)
   ;;
 
-  let forward_transform = transform Reference.Eight_point.forward_transform_matrix
-  let inverse_transform = transform Reference.Eight_point.inverse_transform_matrix
+  let forward_transform = transform Floating_point.Eight_point.forward_transform_matrix
+  let inverse_transform = transform Floating_point.Eight_point.inverse_transform_matrix
 end

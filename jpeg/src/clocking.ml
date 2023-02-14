@@ -22,6 +22,8 @@ let reg_fb ?(enable = Signal.vdd) ?clear_to clocking ~width ~f =
   Signal.reg_fb (to_spec ?clear_to clocking) ~enable ~width ~f
 ;;
 
+let pipeline ?enable clocking ~n d = Signal.pipeline (to_spec clocking) ?enable ~n d
+
 let state_machine ?encoding ?(enable = Signal.vdd) state clocking =
   Always.State_machine.create ?encoding state (to_spec clocking) ~enable
 ;;

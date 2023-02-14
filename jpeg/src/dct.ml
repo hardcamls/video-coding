@@ -43,12 +43,12 @@ end
 module Var = Always.Variable
 
 let idct_rom ~row ~col =
-  let open Hardcaml_jpeg_model.Dct.Reference in
+  let open Hardcaml_jpeg_model.Dct in
   let rnd f =
     Float.(f * (2. ** Float.of_int rom_prec) |> Float.round_nearest |> Float.to_int)
   in
-  Eight_point.inverse_transform_matrix
-  |> Util.map ~f:(fun x -> Signal.of_int ~width:rom_prec (rnd x))
+  Floating_point.Eight_point.inverse_transform_matrix
+  |> Matrix8x8.map ~f:(fun x -> Signal.of_int ~width:rom_prec (rnd x))
   |> Array.map ~f:(fun d -> mux col (Array.to_list d))
   |> Array.to_list
   |> mux row
@@ -57,6 +57,8 @@ let idct_rom ~row ~col =
 let create scope (i : _ I.t) =
   let ( -- ) = Scope.naming scope in
   let ( --. ) s n = ignore (s -- n : Signal.t) in
+  let reg ?enable d = Clocking.reg i.clocking ?enable d in
+  let pipeline ?enable ~n d = Clocking.pipeline i.clocking ?enable ~n d in
   let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
   sm.current --. "STATE";
   let pass = Clocking.Var.reg i.clocking ~width:1 in
@@ -70,17 +72,18 @@ let create scope (i : _ I.t) =
   let dct_coef =
     let row = mux2 pass.value z.value y.value in
     let col = mux2 pass.value y.value z.value in
-    idct_rom ~row ~col -- "dct_coef"
+    reg (idct_rom ~row ~col) -- "dct_coef"
   in
   let mul =
-    (* XXX coef's should be delayed by 1 cycle, but they aren't in the testbench right now. *)
-    let coef = mux2 pass.value i.transpose_coef_in (uresize i.coef transpose_bits) in
-    Clocking.reg i.clocking (coef *+ dct_coef) -- "dct_mul"
+    let coef =
+      mux2 (reg pass.value) i.transpose_coef_in (uresize i.coef transpose_bits)
+    in
+    reg (coef *+ dct_coef) -- "dct_mul"
   in
   let mac =
     reg_fb (Clocking.to_spec i.clocking) ~enable:vdd ~width:mac_bits ~f:(fun d ->
         let mul = sresize mul mac_bits in
-        mux2 (Clocking.reg i.clocking (z.value ==:. 0)) mul (d +: mul))
+        mux2 (reg (pipeline ~n:2 z.value ==:. 7)) mul (d +: mul))
     -- "dct_mac"
   in
   let module Fixed = Hardcaml_fixed_point.Signed (Signal) in
@@ -141,14 +144,11 @@ let create scope (i : _ I.t) =
   let read = sm.is Run in
   let write =
     let writing = z.value ==:. 7 in
-    pipeline (Clocking.to_spec i.clocking) ~n:3 writing
+    pipeline ~n:3 writing
   in
-  let write_pass = pipeline (Clocking.to_spec i.clocking) ~n:3 pass.value in
+  let write_pass = pipeline ~n:3 pass.value in
   let write_address =
-    pipeline
-      (Clocking.to_spec i.clocking)
-      ~n:3
-      (mux2 pass.value (y.value @: x.value) (x.value @: y.value))
+    pipeline ~n:3 (mux2 pass.value (y.value @: x.value) (x.value @: y.value))
   in
   { O.pixel = clipped_and_rounded_pixel
   ; pixel_write = write &: write_pass

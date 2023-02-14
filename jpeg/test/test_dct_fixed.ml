@@ -7,7 +7,7 @@ let%expect_test "min and max idct coefs" =
         Array.fold ~init:acc ~f:(fun acc m -> min_or_max m acc))
   in
   let fdct =
-    calc Hardcaml_jpeg_model.Dct.Reference.Eight_point.forward_transform_matrix
+    calc Hardcaml_jpeg_model.Dct.Floating_point.Eight_point.forward_transform_matrix
   in
   let max = fdct Float.max in
   let min = fdct Float.min in
@@ -17,7 +17,7 @@ let%expect_test "min and max idct coefs" =
     ("fdct coefficient range" (max 0.49039264020161533)
      (min -0.49039264020161533)) |}];
   let idct =
-    calc Hardcaml_jpeg_model.Dct.Reference.Eight_point.inverse_transform_matrix
+    calc Hardcaml_jpeg_model.Dct.Floating_point.Eight_point.inverse_transform_matrix
   in
   let max = idct Float.max in
   let min = idct Float.min in
@@ -115,7 +115,7 @@ let%expect_test "fixed sum" =
   let inputs = Array.init 8 ~f:(fun _ -> Random.int 400 - 200) in
   let row i =
     let row =
-      Hardcaml_jpeg_model.Dct.Reference.Eight_point.forward_transform_matrix.(i)
+      Hardcaml_jpeg_model.Dct.Floating_point.Eight_point.forward_transform_matrix.(i)
     in
     let float_result =
       Array.map2_exn (Array.map inputs ~f:Float.of_int) row ~f:Float.( * )
@@ -137,7 +137,7 @@ let%expect_test "fixed sum" =
       (((unscaled 437202) (scaled_and_clipped 107) (floating 106.73876953125))
        106.75520931213394)
       (((unscaled -50680) (scaled_and_clipped -12) (floating -12.373046875))
-       -12.374368670764497)
+       -12.37436867076449)
       (((unscaled -323971) (scaled_and_clipped -79) (floating -79.094482421875))
        -79.058145677711138)
       (((unscaled -275580) (scaled_and_clipped -67) (floating -67.2802734375))
@@ -150,6 +150,6 @@ let%expect_test "fixed sum" =
     {|
     (error
      (0.010007882217536235 0.028793094552611365 0.0090925894719191547
-      0.01643978088394249 0.0013217957644968692 0.036336744163861567
+      0.01643978088394249 0.0013217957644897638 0.036336744163861567
       0.018510823587320147 0.01188827576913809)) |}]
 ;;

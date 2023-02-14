@@ -9,6 +9,7 @@ type 'a t =
 
 val to_spec : ?clear_to:Signal.t -> Signal.t t -> Reg_spec.t
 val reg : ?enable:Signal.t -> ?clear_to:Signal.t -> Signal.t t -> Signal.t -> Signal.t
+val pipeline : ?enable:Signal.t -> Signal.t t -> n:int -> Signal.t -> Signal.t
 
 val reg_fb
   :  ?enable:Signal.t

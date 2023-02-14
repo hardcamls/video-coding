@@ -5,45 +5,48 @@ module Chen : sig
   val inverse_8x8 : int array -> unit
 end
 
-module Reference : sig
-  (** 8x8 matrix *)
-  type 'a matrix8x8 = 'a array array
+module Matrix8x8 : sig
+  type 'a t = 'a array array [@@deriving sexp_of]
 
-  (** 4x4 matrix*)
-  type 'a matrix4x4 = 'a array array
+  val init : (row:int -> col:int -> 'a) -> 'a t
+  val map : 'a t -> f:('a -> 'b) -> 'b t
+  val map2 : 'a t -> 'b t -> f:('a -> 'b -> 'c) -> 'c t
+  val mapi : 'a t -> f:(row:int -> col:int -> 'a -> 'b) -> 'b t
+  val iter : 'a t -> f:('a -> unit) -> unit
+  val iteri : 'a t -> f:(row:int -> col:int -> 'a -> unit) -> unit
+  val transpose : float t -> float t
+  val fmul : float t -> float t -> float t
+  val imul : int t -> int t -> int t
+end
 
-  module Util : sig
-    val init : (row:int -> col:int -> 'a) -> 'a matrix8x8
-    val map : 'a matrix8x8 -> f:('a -> 'b) -> 'b matrix8x8
-    val map2 : 'a matrix8x8 -> 'b matrix8x8 -> f:('a -> 'b -> 'c) -> 'c matrix8x8
-    val mapi : 'a matrix8x8 -> f:(row:int -> col:int -> 'a -> 'b) -> 'b matrix8x8
-    val iter : 'a matrix8x8 -> f:('a -> unit) -> unit
-    val iteri : 'a matrix8x8 -> f:(row:int -> col:int -> 'a -> unit) -> unit
-    val transpose : float matrix8x8 -> float matrix8x8
-    val mul : float matrix8x8 -> float matrix8x8 -> float matrix8x8
-  end
+module Matrix4x4 : sig
+  type 'a t = 'a array array [@@deriving sexp_of]
+end
 
+module Floating_point : sig
   (** Reference 8x8 transforms. *)
   module Eight_point : sig
-    val forward_transform_matrix : float matrix8x8
-    val inverse_transform_matrix : float matrix8x8
-    val forward_transform : float matrix8x8 -> float matrix8x8
-    val inverse_transform : float matrix8x8 -> float matrix8x8
+    val forward_transform_matrix : float Matrix8x8.t
+    val inverse_transform_matrix : float Matrix8x8.t
+    val forward_transform : float Matrix8x8.t -> float Matrix8x8.t
+    val inverse_transform : float Matrix8x8.t -> float Matrix8x8.t
   end
 
   (** Building 8x8 transforms from 4x4 transforms. *)
   module Using_four_point : sig
-    val even_fdct_4pt_coefs : float matrix4x4
-    val odd_fdct_4pt_coefs : float matrix4x4
-    val even_idct_4pt_coefs : float matrix4x4
-    val odd_idct_4pt_coefs : float matrix4x4
-    val forward_transform : float matrix8x8 -> float matrix8x8
-    val inverse_transform : float matrix8x8 -> float matrix8x8
+    val even_fdct_4pt_coefs : float Matrix4x4.t
+    val odd_fdct_4pt_coefs : float Matrix4x4.t
+    val even_idct_4pt_coefs : float Matrix4x4.t
+    val odd_idct_4pt_coefs : float Matrix4x4.t
+    val forward_transform : float Matrix8x8.t -> float Matrix8x8.t
+    val inverse_transform : float Matrix8x8.t -> float Matrix8x8.t
   end
 end
 
 module Fixed_point : sig
+  val fixed_coefs : fixed_prec:int -> float Matrix8x8.t -> int Matrix8x8.t
   val round : int -> fixed_prec:int -> int
+  val round_matrix : int Matrix8x8.t -> prec:int -> int Matrix8x8.t
 
   val forward_transform
     :  rom_prec:int
