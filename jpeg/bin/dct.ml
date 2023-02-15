@@ -223,17 +223,26 @@ let command_search =
         done]
 ;;
 
-let command_idct_hardware =
+let command_dct_hardware (module Config : Hardcaml_jpeg.Dct.Config) =
   Command.basic
     ~summary:"Simulate IDCT"
     [%map_open.Command
       let seed = flag "-seed" (optional int) ~doc:"" in
       fun () ->
+        let module Dct = Hardcaml_jpeg_test.Test_dct.Make (Config) in
         Option.iter seed ~f:Random.init;
-        let inputs = Hardcaml_jpeg_test.Test_dct.create_inputs () in
-        Hardcaml_jpeg_test.Test_dct.reference inputs;
-        let waves = Hardcaml_jpeg_test.Test_dct.(simulate_idct inputs) in
+        let inputs = Dct.create_inputs () in
+        Dct.reference inputs;
+        let waves = Dct.(simulate_dct inputs) in
         Hardcaml_waveterm_interactive.run waves]
+;;
+
+let command_hardware =
+  Command.group
+    ~summary:"Hardware simulations"
+    [ "forward", command_dct_hardware (module Hardcaml_jpeg.Dct.Dct_config)
+    ; "inverse", command_dct_hardware (module Hardcaml_jpeg.Dct.Idct_config)
+    ]
 ;;
 
 let () =
@@ -244,6 +253,6 @@ let () =
        ; "inverse", command_inverse
        ; "both", command_both
        ; "search", command_search
-       ; "hardware", command_idct_hardware
+       ; "hardware", command_hardware
        ])
 ;;
