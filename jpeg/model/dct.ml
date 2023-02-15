@@ -226,6 +226,10 @@ module Matrix8x8 = struct
             done;
             !sum))
   ;;
+
+  let iclip ~min ~max m =
+    map m ~f:(fun x -> if x < min then min else if x > max then max else x)
+  ;;
 end
 
 module Matrix4x4 = struct

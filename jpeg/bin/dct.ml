@@ -225,7 +225,7 @@ let command_search =
 
 let command_idct_hardware =
   Command.basic
-    ~summary:""
+    ~summary:"Simulate IDCT"
     [%map_open.Command
       let seed = flag "-seed" (optional int) ~doc:"" in
       fun () ->

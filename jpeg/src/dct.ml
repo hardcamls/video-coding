@@ -70,35 +70,23 @@ let create scope (i : _ I.t) =
   let z = Clocking.Var.reg i.clocking ~width:3 in
   z.value --. "z";
   let dct_coef =
-    let row = mux2 pass.value z.value y.value in
-    let col = mux2 pass.value y.value z.value in
+    let row = mux2 pass.value y.value x.value in
+    let col = mux2 pass.value z.value z.value in
     reg (idct_rom ~row ~col) -- "dct_coef"
   in
   let mul =
     let coef =
-      mux2 (reg pass.value) i.transpose_coef_in (uresize i.coef transpose_bits)
+      mux2 (reg pass.value) i.transpose_coef_in (sresize i.coef transpose_bits)
     in
     reg (coef *+ dct_coef) -- "dct_mul"
   in
   let mac =
     reg_fb (Clocking.to_spec i.clocking) ~enable:vdd ~width:mac_bits ~f:(fun d ->
         let mul = sresize mul mac_bits in
-        mux2 (reg (pipeline ~n:2 z.value ==:. 7)) mul (d +: mul))
+        mux2 (pipeline ~n:2 z.value ==:. 0) mul (d +: mul))
     -- "dct_mac"
   in
   let module Fixed = Hardcaml_fixed_point.Signed (Signal) in
-  let clipped_and_rounded_pixel =
-    let mac = Fixed.create rom_prec mac in
-    Fixed.(
-      signal
-        (resize
-           ~round:Fixed.Round.tie_away_from_zero
-           ~overflow:Fixed.Overflow.saturate
-           mac
-           8
-           0))
-    |> Clocking.reg i.clocking
-  in
   let rounded_transpose_coef =
     let mac = Fixed.create rom_prec mac in
     Fixed.(
@@ -109,6 +97,18 @@ let create scope (i : _ I.t) =
            mac
            (input_bits + 3)
            transpose_prec))
+  in
+  let clipped_and_rounded_pixel =
+    let mac = Fixed.create (rom_prec + transpose_prec) mac in
+    Fixed.(
+      signal
+        (resize
+           ~round:Fixed.Round.tie_away_from_zero
+           ~overflow:Fixed.Overflow.saturate
+           mac
+           8
+           0))
+    (* |> Clocking.reg i.clocking *)
   in
   assert (width rounded_transpose_coef = transpose_bits);
   Always.(
@@ -140,16 +140,14 @@ let create scope (i : _ I.t) =
               ] )
           ]
       ]);
-  let read_address = mux2 pass.value (x.value @: z.value) (z.value @: x.value) in
+  let read_address = mux2 pass.value (x.value @: z.value) (z.value @: y.value) in
   let read = sm.is Run in
   let write =
     let writing = z.value ==:. 7 in
     pipeline ~n:3 writing
   in
   let write_pass = pipeline ~n:3 pass.value in
-  let write_address =
-    pipeline ~n:3 (mux2 pass.value (y.value @: x.value) (x.value @: y.value))
-  in
+  let write_address = pipeline ~n:3 (x.value @: y.value) in
   { O.pixel = clipped_and_rounded_pixel
   ; pixel_write = write &: write_pass
   ; transpose_coef_out = rounded_transpose_coef

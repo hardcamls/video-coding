@@ -14,9 +14,10 @@ module Matrix8x8 : sig
   val mapi : 'a t -> f:(row:int -> col:int -> 'a -> 'b) -> 'b t
   val iter : 'a t -> f:('a -> unit) -> unit
   val iteri : 'a t -> f:(row:int -> col:int -> 'a -> unit) -> unit
-  val transpose : float t -> float t
+  val transpose : 'a t -> 'a t
   val fmul : float t -> float t -> float t
   val imul : int t -> int t -> int t
+  val iclip : min:int -> max:int -> int t -> int t
 end
 
 module Matrix4x4 : sig
