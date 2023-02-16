@@ -45,15 +45,29 @@ module Args = struct
   open Command.Param
 
   let rom_prec prefix =
-    flag [%string "%{prefix}-rom-prec"] (optional_with_default 12 int) ~doc:""
+    flag
+      [%string "%{prefix}-rom-prec"]
+      (optional_with_default 12 int)
+      ~doc:"INT fixed point precision of DCT coefficient ROM"
   ;;
 
   let transpose_prec prefix =
-    flag [%string "%{prefix}-transpose-prec"] (optional_with_default 2 int) ~doc:""
+    flag
+      [%string "%{prefix}-transpose-prec"]
+      (optional_with_default 2 int)
+      ~doc:"INT fixed point precision kept through the transpose stage"
   ;;
 
-  let range = flag "-input-range" (optional_with_default 200 int) ~doc:""
-  let count = flag "-count" (optional_with_default 1 int) ~doc:""
+  let range =
+    flag
+      "-input-range"
+      (optional_with_default 200 int)
+      ~doc:"INT [-X,X) range of test input coefficients"
+  ;;
+
+  let count =
+    flag "-count" (optional_with_default 1 int) ~doc:"INT number of tests to run"
+  ;;
 
   let arg =
     [%map_open.Command
@@ -190,7 +204,9 @@ let command_search =
   Command.basic
     ~summary:"Search over parameter range and display error"
     [%map_open.Command
-      let count = flag "-count" (optional_with_default 10_000 int) ~doc:"" in
+      let count =
+        flag "-count" (optional_with_default 10_000 int) ~doc:"INT number of tests to run"
+      in
       fun () ->
         for fwd_rom_prec = 8 to 16 do
           for fwd_transpose_prec = 0 to 5 do
@@ -227,8 +243,10 @@ let command_dct_hardware (module Config : Hardcaml_jpeg.Dct.Config) =
   Command.basic
     ~summary:"Simulate DCT"
     [%map_open.Command
-      let seed = flag "-seed" (optional int) ~doc:""
-      and count = flag "-count" (optional_with_default 1 int) ~doc:"" in
+      let seed = flag "-seed" (optional int) ~doc:"INT Randomness seed"
+      and count =
+        flag "-count" (optional_with_default 1 int) ~doc:"INT number of tests to run"
+      in
       fun () ->
         let module Dct =
           Hardcaml_jpeg_test.Test_dct.Make (struct
@@ -272,7 +290,7 @@ let command_hardware =
 let () =
   Command_unix.run
     (Command.group
-       ~summary:""
+       ~summary:"DCT tests"
        [ "forward", command_forward
        ; "inverse", command_inverse
        ; "both", command_both
