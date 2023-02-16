@@ -225,16 +225,40 @@ let command_search =
 
 let command_dct_hardware (module Config : Hardcaml_jpeg.Dct.Config) =
   Command.basic
-    ~summary:"Simulate IDCT"
+    ~summary:"Simulate DCT"
     [%map_open.Command
-      let seed = flag "-seed" (optional int) ~doc:"" in
+      let seed = flag "-seed" (optional int) ~doc:""
+      and count = flag "-count" (optional_with_default 1 int) ~doc:"" in
       fun () ->
-        let module Dct = Hardcaml_jpeg_test.Test_dct.Make (Config) in
+        let module Dct =
+          Hardcaml_jpeg_test.Test_dct.Make (struct
+            include Config
+
+            let test_range = 128
+          end)
+        in
         Option.iter seed ~f:Random.init;
-        let inputs = Dct.create_inputs () in
-        Dct.reference inputs;
-        let waves = Dct.(simulate_dct inputs) in
-        Hardcaml_waveterm_interactive.run waves]
+        if count = 1
+        then (
+          let inputs = Dct.create_inputs () in
+          Dct.print_reference inputs;
+          let waves = Dct.simulate_dct_waveform inputs in
+          Hardcaml_waveterm_interactive.run waves)
+        else
+          for _ = 1 to count do
+            let inputs = Dct.create_inputs () in
+            let transpose, results = Dct.reference inputs in
+            let transpose', results' = Dct.simulate_dct inputs in
+            if (not ([%compare.equal: int array array] transpose transpose'))
+               || not ([%compare.equal: int array array] results results')
+            then
+              raise_s
+                [%message
+                  (transpose : int array array)
+                    (transpose' : int array array)
+                    (results : int array array)
+                    (results' : int array array)]
+          done]
 ;;
 
 let command_hardware =
