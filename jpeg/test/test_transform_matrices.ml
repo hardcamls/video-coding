@@ -1,5 +1,11 @@
 open Core 
 
+(* We have seen a difference in the matrices generated in x86 (amd) and ARM processors. 
+
+  This has been leading to some changes in the tests.  Print them out here so we can
+  further debug and decide what to do about it.
+*)
+
 let%expect_test "forward" = 
   let open Hardcaml_jpeg_model.Dct in
   let forward = Floating_point.Eight_point.forward_transform_matrix in 
