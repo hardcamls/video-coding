@@ -10,7 +10,7 @@ module I = struct
               behaviour.*)
     ; bits_in : 'a [@bits 16]
           (** 32 bits of data from the bitstream provided to the reader. *)
-    ; bits_in_available : 'a (** The next 32 bits of input bitstream are available *)
+    ; bits_in_available : 'a (** The next 16 bits of input bitstream are available *)
     }
   [@@deriving sexp_of, hardcaml]
 end

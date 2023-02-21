@@ -6,6 +6,7 @@ module I : sig
     { clocking : 'a Clocking.t
     ; start : 'a
     ; bits : 'a
+    ; bits_valid : 'a
     }
   [@@deriving sexp_of, hardcaml]
 end

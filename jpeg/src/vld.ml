@@ -6,6 +6,7 @@ module I = struct
     { clocking : 'a Clocking.t
     ; start : 'a
     ; bits : 'a [@bits 16]
+    ; bits_valid : 'a
     }
   [@@deriving sexp_of, hardcaml]
 end
@@ -33,7 +34,7 @@ module O = struct
     ; run : 'a [@bits 4]
     ; write : 'a
     ; read_bits : 'a [@bits 5] (* 0..16 *)
-    ; error : 'a Error.t
+    ; error : 'a Error.t [@rtlprefix "error_"]
     }
   [@@deriving sexp_of, hardcaml]
 end
@@ -151,9 +152,9 @@ let create _scope (i : _ I.t) =
   let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
   let read_bits = Var.wire ~default:(zero 5) in
   let error = Error.Of_always.wire zero in
-  let _set_error =
+  let set_error e =
     Always.proc
-      [ Error.Of_always.assign error (Error.of_enum (module Signal) Decode_error)
+      [ Error.Of_always.assign error (Error.of_enum (module Signal) e)
       ; sm.set_next Error
       ]
   in
@@ -163,25 +164,29 @@ let create _scope (i : _ I.t) =
       ; sm.switch
           [ Start, [ when_ i.start [ sm.set_next Scan_markers ] ]
           ; ( Scan_markers
-            , [ read_bits <--. 8
-              ; when_
-                  (i.bits.:[15, 8] ==:. 0xff)
-                  [ switch
-                      i.bits.:[7, 0]
-                      ([ Marker_code.sof0, [ read_bits <--. 16; sm.set_next Sof ]
-                       ; Marker_code.sos, [ read_bits <--. 16 ]
-                       ; Marker_code.dqt, [ read_bits <--. 16 ]
-                       ; Marker_code.dht, [ read_bits <--. 16 ]
-                       ; Marker_code.dri, [ read_bits <--. 16 ]
-                       ]
-                      |> List.map ~f:(fun (s, c) -> Signal.of_int ~width:8 s, c))
+            , [ when_
+                  i.bits_valid
+                  [ read_bits <--. 8
+                  ; when_
+                      (i.bits.:[7, 0] ==:. 0xff)
+                      [ switch
+                          i.bits.:[15, 8]
+                          ([ Marker_code.sof0, [ read_bits <--. 16; sm.set_next Sof ]
+                           ; Marker_code.sos, [ read_bits <--. 16 ]
+                           ; Marker_code.dqt, [ read_bits <--. 16 ]
+                           ; Marker_code.dht, [ read_bits <--. 16 ]
+                           ; Marker_code.dri, [ read_bits <--. 16 ]
+                           ]
+                          |> List.map ~f:(fun (s, c) -> Signal.of_int ~width:8 s, c))
+                      ]
                   ]
               ] )
-          ; Sof, []
+          ; Sof, [ set_error Decode_error ]
           ; Sos, []
           ; Dqt, []
           ; Dht, []
           ; Dri, []
+          ; Error, []
           ]
       ]);
   { O.coef = zero 12
