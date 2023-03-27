@@ -41,5 +41,6 @@ module Make (Config : Config) : sig
     [@@deriving sexp_of, hardcaml]
   end
 
-  val create : Scope.t -> Signal.t Interface.Create_fn(I)(O).t
+  val create : Scope.t -> Interface.Create_fn(I)(O).t
+  val hierarchical : Scope.t -> Interface.Create_fn(I)(O).t
 end

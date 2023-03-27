@@ -6,7 +6,8 @@ module Reader = Hardcaml_jpeg.Bitstream_reader
 module Sim = Cyclesim.With_interface (Reader.I) (Reader.O)
 
 let create_sim () =
-  let sim = Sim.create ~config:Cyclesim.Config.trace_all Reader.create in
+  let scope = Scope.create ~flatten_design:true () in
+  let sim = Sim.create ~config:Cyclesim.Config.trace_all (Reader.create scope) in
   let waves, sim = Waveform.create sim in
   let inputs = Cyclesim.inputs sim in
   let outputs = Cyclesim.outputs sim in
@@ -41,36 +42,26 @@ let display_rules =
   let hex = Wave_format.Bit_or Hex in
   let uint = Wave_format.Bit_or Unsigned_int in
   let inputs =
-    { Reader.I.(map t ~f:(Fn.const hex)) with
-      advance_bits = uint
-    ; bits_in_available = uint
-    }
+    { Reader.I.(const hex) with advance_bits = uint; bits_in_available = uint }
   in
   let outputs =
-    { Reader.O.(map t ~f:(Fn.const hex)) with
-      bits_out_available = uint
-    ; read_bits_in = uint
-    }
+    { Reader.O.(const hex) with bits_out_available = uint; read_bits_in = uint }
   in
   Display_rule.(
-      (List.concat
-         [ Reader.I.(
-             to_list
-             @@ map2 port_names inputs ~f:(fun name wave_format ->
-                    port_name_is name ~wave_format))
-         ; Reader.O.(
-             to_list
-             @@ map2 port_names outputs ~f:(fun name wave_format ->
-                    port_name_is name ~wave_format))
-         ; [ port_name_is
-               "num_bits_available"
-               ~wave_format:Unsigned_int
-           ; port_name_is "bits_buffer" ~wave_format:Hex
-           ; port_name_is
-               "bits_buffer_offset"
-               ~wave_format:Unsigned_int
-           ]
-         ]))
+    List.concat
+      [ Reader.I.(
+          to_list
+          @@ map2 port_names inputs ~f:(fun name wave_format ->
+                 port_name_is name ~wave_format))
+      ; Reader.O.(
+          to_list
+          @@ map2 port_names outputs ~f:(fun name wave_format ->
+                 port_name_is name ~wave_format))
+      ; [ port_name_is "num_bits_available" ~wave_format:Unsigned_int
+        ; port_name_is "bits_buffer" ~wave_format:Hex
+        ; port_name_is "bits_buffer_offset" ~wave_format:Unsigned_int
+        ]
+      ])
 ;;
 
 let%expect_test "Simple bits/cycle" =
@@ -233,8 +224,7 @@ let test_random_bits_per_cycle num_words_in =
 let%expect_test "random bits per cycle" =
   let waves = test_random_bits_per_cycle 1_000 in
   Waveform.print ~display_height:30 ~display_width:90 ~wave_width:0 ~display_rules waves;
-  [%expect
-    {|
+  [%expect{|
     ┌Signals───────────┐┌Waves───────────────────────────────────────────────────────────────┐
     │clock             ││┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐┌┐│
     │                  ││ └┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└┘└│

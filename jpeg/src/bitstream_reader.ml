@@ -29,7 +29,7 @@ let or_0 s a = mux2 s a (zero (width a))
 (* We maintain a 48 bit internal buffer where upto 16 bits can be input and
    output per cycle. Note that a 32 bit buffer doesn't work so well as it stalls
    a lot. *)
-let create (i : _ I.t) =
+let create _scope (i : _ I.t) =
   (* Add and/or subtract bits from the buffer *)
   let bits_available = wire 6 in
   (* Bits are available at the output *)
@@ -57,4 +57,9 @@ let create (i : _ I.t) =
     mux bits_buffer_offset (List.init 33 ~f:(fun i -> (srl buffer i).:[15, 0]))
   in
   { O.bits; bits_out_available = can_output_bits; read_bits_in = can_input_bits }
+;;
+
+let hierarchical scope =
+  let module Hier = Hierarchy.In_scope (I) (O) in
+  Hier.hierarchical ~scope ~name:"reader" create
 ;;

@@ -187,4 +187,9 @@ module Make (Config : Config) = struct
     ; write_address
     }
   ;;
+
+  let hierarchical scope =
+    let module Hier = Hierarchy.In_scope (I) (O) in
+    Hier.hierarchical ~scope ~name:"dct" create
+  ;;
 end
