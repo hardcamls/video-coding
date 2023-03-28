@@ -6,182 +6,6 @@ module Core = struct
   module Var = Always.Variable
   module Marker_code = Hardcaml_jpeg_model.Marker_code
 
-  module Fields_decoder (Fields : Interface.S) = struct
-    module I = struct
-      type 'a t =
-        { clocking : 'a Clocking.t
-        ; start : 'a
-        ; bits : 'a [@bits 16]
-        }
-      [@@deriving sexp_of, hardcaml]
-    end
-
-    module O = struct
-      type 'a t =
-        { read_bits : 'a [@bits 5]
-        ; fields : 'a Fields.t
-        ; done_ : 'a
-        }
-      [@@deriving sexp_of, hardcaml]
-    end
-
-    module State = struct
-      type t = string [@@deriving sexp_of, compare]
-
-      let all = Fields.(to_list port_names)
-      let num_states = List.length all
-
-      let next current =
-        let rec index i = function
-          | [] -> raise_s [%message "Invalid state" (current : string)]
-          | h :: t ->
-            if String.equal current h then (i + 1) % num_states else index (i + 1) t
-        in
-        let index = index 0 all in
-        List.nth_exn all index
-      ;;
-    end
-
-    let create _scope (i : _ I.t) =
-      let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
-      let read_bits = Var.wire ~default:(zero 5) in
-      let fields = Fields.Of_always.reg (Clocking.to_spec i.clocking) in
-      let states =
-        Fields.(
-          map3 port_names port_widths fields ~f:(fun name width field ->
-              ( name
-              , Always.
-                  [ read_bits <--. width
-                  ; field <-- i.bits.:[width - 1, 0]
-                  ; sm.set_next (State.next name)
-                  ] )))
-      in
-      let states =
-        Fields.to_list states
-        |> List.mapi ~f:(fun index (s, p) ->
-               if index = 0 then s, Always.[ when_ i.start p ] else s, p)
-      in
-      Always.(compile [ sm.switch states ]);
-      { O.read_bits = read_bits.value
-      ; fields = Fields.Of_always.value fields
-      ; done_ = sm.is (List.hd_exn State.all) &: ~:(i.start)
-      }
-    ;;
-
-    let hierarchical ~name scope =
-      let module Hier = Hierarchy.In_scope (I) (O) in
-      Hier.hierarchical ~scope ~name create
-    ;;
-  end
-
-  module Sof = struct
-    module Fields = struct
-      type 'a t =
-        { length : 'a [@bits 16]
-        ; sample_precision : 'a [@bits 8]
-        ; height : 'a [@bits 16]
-        ; width : 'a [@bits 16]
-        ; number_of_components : 'a [@bits 8]
-        }
-      [@@deriving sexp_of, hardcaml]
-    end
-
-    include Fields_decoder (Fields)
-  end
-
-  module Component = struct
-    module Fields = struct
-      type 'a t =
-        { identifier : 'a [@bits 8]
-        ; vertical_sampling_factor : 'a [@bits 4]
-        ; horizontal_sampling_factor : 'a [@bits 4]
-        ; quantization_table_identifier : 'a [@bits 8]
-        }
-      [@@deriving sexp_of, hardcaml]
-    end
-
-    include Fields_decoder (Fields)
-  end
-
-  module Dqt = struct
-    module Header = struct
-      module Fields = struct
-        type 'a t =
-          { length : 'a [@bits 16]
-          ; element_precision : 'a [@bits 4]
-          ; table_identifier : 'a [@bits 4]
-          }
-        [@@deriving sexp_of, hardcaml]
-      end
-
-      include Fields_decoder (Fields)
-    end
-
-    module I = struct
-      type 'a t =
-        { clocking : 'a Clocking.t
-        ; start : 'a
-        ; bits : 'a [@bits 16]
-        }
-      [@@deriving sexp_of, hardcaml]
-    end
-
-    module Fields = struct
-      type 'a t =
-        { fields : 'a Header.Fields.t
-        ; element : 'a [@bits 16]
-        }
-      [@@deriving sexp_of, hardcaml]
-    end
-
-    module O = struct
-      type 'a t =
-        { read_bits : 'a [@bits 5]
-        ; fields : 'a Fields.t
-        ; done_ : 'a
-        }
-      [@@deriving sexp_of, hardcaml]
-    end
-
-    module State = struct
-      type t =
-        | Start
-        | Header
-        | Table
-      [@@deriving sexp_of, enumerate, compare]
-    end
-
-    let create scope (i : _ I.t) =
-      let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
-      let done_ = Var.wire ~default:gnd in
-      let header = Header.O.Of_signal.wires () in
-      Always.(
-        compile
-          [ sm.switch
-              [ ( Start
-                , [ done_ <-- vdd; when_ i.start [ done_ <-- gnd; sm.set_next Header ] ] )
-              ; Header, [ when_ header.done_ [ sm.set_next Table ] ]
-              ; Table, [ sm.set_next Start ]
-              ]
-          ]);
-      Header.O.Of_signal.assign
-        header
-        (Header.hierarchical
-           scope
-           ~name:"dqthdr"
-           { Header.I.clocking = i.clocking; start = i.start; bits = i.bits });
-      { O.read_bits = header.read_bits
-      ; fields = { fields = header.fields; element = zero 16 }
-      ; done_ = done_.value
-      }
-    ;;
-
-    let hierarchical scope =
-      let module Hier = Hierarchy.In_scope (I) (O) in
-      Hier.hierarchical ~scope ~name:"dqt" create
-    ;;
-  end
-
   module I = struct
     type 'a t =
       { clocking : 'a Clocking.t
@@ -217,7 +41,7 @@ module Core = struct
       ; run : 'a [@bits 4]
       ; write : 'a
       ; read_bits : 'a [@bits 5] (* 0..16 *)
-      ; dqt : 'a Dqt.Fields.t
+      ; dqt : 'a Markers.Dqt.Fields.t
       ; error : 'a Error.t [@rtlprefix "error_"]
       }
     [@@deriving sexp_of, hardcaml]
@@ -248,7 +72,7 @@ module Core = struct
         ; sm.set_next Error
         ]
     in
-    let dqt = Dqt.O.Of_signal.wires () in
+    let dqt = Markers.Dqt.O.Of_signal.wires () in
     let start_dqt = Var.wire ~default:gnd in
     Always.(
       compile
@@ -283,11 +107,11 @@ module Core = struct
             ; Error, []
             ]
         ]);
-    Dqt.O.Of_signal.assign
+    Markers.Dqt.O.Of_signal.assign
       dqt
-      (Dqt.hierarchical
+      (Markers.Dqt.hierarchical
          scope
-         { Dqt.I.clocking = i.clocking; start = start_dqt.value; bits = i.bits });
+         { Markers.Dqt.I.clocking = i.clocking; start = start_dqt.value; bits = i.bits });
     let read_bits =
       priority_select_with_default
         [ { valid = ~:(dqt.done_); value = dqt.read_bits } ]
@@ -324,7 +148,7 @@ module With_reader = struct
       { coef : 'a [@bits 12]
       ; run : 'a [@bits 4]
       ; write : 'a
-      ; dqt : 'a Core.Dqt.Fields.t
+      ; dqt : 'a Markers.Dqt.Fields.t
       ; error : 'a Core.Error.t [@rtlprefix "error_"]
       ; read_bits_in : 'a
       }
