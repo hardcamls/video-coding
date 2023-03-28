@@ -295,8 +295,8 @@ module Core = struct
     in
     { O.coef = zero 12
     ; run = zero 4
-    ; write = gnd
-    ; read_bits = Clocking.reg i.clocking read_bits
+    ; write = gnd (* ; read_bits = Clocking.reg i.clocking read_bits *)
+    ; read_bits
     ; dqt = dqt.fields
     ; error = Error.Of_always.value error
     }
