@@ -2,59 +2,6 @@ open! Base
 open Hardcaml
 
 module Core = struct
-  module I = struct
-    type 'a t =
-      { clocking : 'a Clocking.t
-      ; start : 'a
-      ; bits : 'a [@bits 16]
-      ; bits_valid : 'a
-      }
-    [@@deriving sexp_of, hardcaml]
-  end
-
-  module Error = struct
-    module T = struct
-      type t =
-        | Ok
-        | Decode_error
-      [@@deriving sexp_of, compare, enumerate, variants]
-
-      let to_string =
-        let arr =
-          Array.of_list (List.map all ~f:(fun v -> Sexp.to_string (sexp_of_t v)))
-        in
-        fun v -> arr.(Variants.to_rank v)
-      ;;
-    end
-
-    include T
-    include Enum.Make_binary (T)
-  end
-
-  module O = struct
-    type 'a t =
-      { coef : 'a [@bits 12]
-      ; run : 'a [@bits 4]
-      ; write : 'a
-      ; read_bits : 'a [@bits 5] (* 0..16 *)
-      ; error : 'a Error.t [@rtlprefix "error_"]
-      }
-    [@@deriving sexp_of, hardcaml]
-  end
-
-  module State = struct
-    type t =
-      | Start
-      | Scan_markers
-      | Sof
-      | Sos
-      | Dqt
-      | Dht
-      | Dri
-      | Error
-    [@@deriving sexp_of, compare, enumerate]
-  end
-
   open Signal
   module Var = Always.Variable
   module Marker_code = Hardcaml_jpeg_model.Marker_code
@@ -95,7 +42,7 @@ module Core = struct
       ;;
     end
 
-    let _create _scope (i : _ I.t) =
+    let create _scope (i : _ I.t) =
       let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
       let read_bits = Var.wire ~default:(zero 5) in
       let fields = Fields.Of_always.reg (Clocking.to_spec i.clocking) in
@@ -117,12 +64,17 @@ module Core = struct
       Always.(compile [ sm.switch states ]);
       { O.read_bits = read_bits.value
       ; fields = Fields.Of_always.value fields
-      ; done_ = sm.is (List.hd_exn State.all)
+      ; done_ = sm.is (List.hd_exn State.all) &: ~:(i.start)
       }
+    ;;
+
+    let hierarchical ~name scope =
+      let module Hier = Hierarchy.In_scope (I) (O) in
+      Hier.hierarchical ~scope ~name create
     ;;
   end
 
-  module Start_of_frame = struct
+  module Sof = struct
     module Fields = struct
       type 'a t =
         { length : 'a [@bits 16]
@@ -151,8 +103,143 @@ module Core = struct
     include Fields_decoder (Fields)
   end
 
-  let create _scope (i : _ I.t) =
+  module Dqt = struct
+    module Header = struct
+      module Fields = struct
+        type 'a t =
+          { length : 'a [@bits 16]
+          ; element_precision : 'a [@bits 4]
+          ; table_identifier : 'a [@bits 4]
+          }
+        [@@deriving sexp_of, hardcaml]
+      end
+
+      include Fields_decoder (Fields)
+    end
+
+    module I = struct
+      type 'a t =
+        { clocking : 'a Clocking.t
+        ; start : 'a
+        ; bits : 'a [@bits 16]
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
+    module Fields = struct
+      type 'a t =
+        { fields : 'a Header.Fields.t
+        ; element : 'a [@bits 16]
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
+    module O = struct
+      type 'a t =
+        { read_bits : 'a [@bits 5]
+        ; fields : 'a Fields.t
+        ; done_ : 'a
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
+    module State = struct
+      type t =
+        | Start
+        | Header
+        | Table
+      [@@deriving sexp_of, enumerate, compare]
+    end
+
+    let create scope (i : _ I.t) =
+      let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
+      let done_ = Var.wire ~default:gnd in
+      let header = Header.O.Of_signal.wires () in
+      Always.(
+        compile
+          [ sm.switch
+              [ ( Start
+                , [ done_ <-- vdd; when_ i.start [ done_ <-- gnd; sm.set_next Header ] ] )
+              ; Header, [ when_ header.done_ [ sm.set_next Table ] ]
+              ; Table, [ sm.set_next Start ]
+              ]
+          ]);
+      Header.O.Of_signal.assign
+        header
+        (Header.hierarchical
+           scope
+           ~name:"dqthdr"
+           { Header.I.clocking = i.clocking; start = i.start; bits = i.bits });
+      { O.read_bits = header.read_bits
+      ; fields = { fields = header.fields; element = zero 16 }
+      ; done_ = done_.value
+      }
+    ;;
+
+    let hierarchical scope =
+      let module Hier = Hierarchy.In_scope (I) (O) in
+      Hier.hierarchical ~scope ~name:"dqt" create
+    ;;
+  end
+
+  module I = struct
+    type 'a t =
+      { clocking : 'a Clocking.t
+      ; start : 'a
+      ; bits : 'a [@bits 16]
+      ; bits_valid : 'a
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  module Error = struct
+    module T = struct
+      type t =
+        | Ok
+        | Decode_error
+      [@@deriving sexp_of, compare, enumerate, variants]
+
+      let to_string =
+        let arr =
+          Array.of_list (List.map all ~f:(fun v -> Sexp.to_string (sexp_of_t v)))
+        in
+        fun v -> arr.(Variants.to_rank v)
+      ;;
+    end
+
+    include T
+    include Enum.Make_binary (T)
+  end
+
+  module O = struct
+    type 'a t =
+      { coef : 'a [@bits 12]
+      ; run : 'a [@bits 4]
+      ; write : 'a
+      ; read_bits : 'a [@bits 5] (* 0..16 *)
+      ; dqt : 'a Dqt.Fields.t
+      ; error : 'a Error.t [@rtlprefix "error_"]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  module State = struct
+    type t =
+      | Start
+      | Scan_markers
+      | Sof
+      | Sos
+      | Dqt
+      | Dht
+      | Dri
+      | Error
+    [@@deriving sexp_of, compare, enumerate]
+  end
+
+  let create scope (i : _ I.t) =
+    let ( -- ) = Scope.naming scope in
     let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
+    ignore (sm.current -- "STATE");
     let read_bits = Var.wire ~default:(zero 5) in
     let error = Error.Of_always.wire zero in
     let set_error e =
@@ -161,6 +248,8 @@ module Core = struct
         ; sm.set_next Error
         ]
     in
+    let dqt = Dqt.O.Of_signal.wires () in
+    let start_dqt = Var.wire ~default:gnd in
     Always.(
       compile
         [ read_bits <--. 0
@@ -175,9 +264,11 @@ module Core = struct
                         [ switch
                             i.bits.:[15, 8]
                             ([ Marker_code.sof0, [ read_bits <--. 16; sm.set_next Sof ]
-                             ; Marker_code.sos, [ read_bits <--. 16 ]
-                             ; Marker_code.dqt, [ read_bits <--. 16 ]
-                             ; Marker_code.dht, [ read_bits <--. 16 ]
+                             ; Marker_code.sos, [ read_bits <--. 16; sm.set_next Sos ]
+                             ; ( Marker_code.dqt
+                               , [ read_bits <--. 16; start_dqt <-- vdd; sm.set_next Dqt ]
+                               )
+                             ; Marker_code.dht, [ read_bits <--. 16; sm.set_next Dht ]
                              ; Marker_code.dri, [ read_bits <--. 16 ]
                              ]
                             |> List.map ~f:(fun (s, c) -> Signal.of_int ~width:8 s, c))
@@ -186,16 +277,27 @@ module Core = struct
                 ] )
             ; Sof, [ set_error Decode_error ]
             ; Sos, []
-            ; Dqt, []
+            ; Dqt, [ when_ dqt.done_ [ sm.set_next Scan_markers ] ]
             ; Dht, []
             ; Dri, []
             ; Error, []
             ]
         ]);
+    Dqt.O.Of_signal.assign
+      dqt
+      (Dqt.hierarchical
+         scope
+         { Dqt.I.clocking = i.clocking; start = start_dqt.value; bits = i.bits });
+    let read_bits =
+      priority_select_with_default
+        [ { valid = ~:(dqt.done_); value = dqt.read_bits } ]
+        ~default:read_bits.value
+    in
     { O.coef = zero 12
     ; run = zero 4
     ; write = gnd
-    ; read_bits = Clocking.reg i.clocking read_bits.value
+    ; read_bits = Clocking.reg i.clocking read_bits
+    ; dqt = dqt.fields
     ; error = Error.Of_always.value error
     }
   ;;
@@ -222,7 +324,9 @@ module With_reader = struct
       { coef : 'a [@bits 12]
       ; run : 'a [@bits 4]
       ; write : 'a
+      ; dqt : 'a Core.Dqt.Fields.t
       ; error : 'a Core.Error.t [@rtlprefix "error_"]
+      ; read_bits_in : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -250,7 +354,13 @@ module With_reader = struct
            ; bits = reader.bits
            ; bits_valid = reader.bits_out_available
            }));
-    { O.coef = vld.coef; run = vld.run; write = vld.write; error = vld.error }
+    { O.coef = vld.coef
+    ; run = vld.run
+    ; write = vld.write
+    ; dqt = vld.dqt
+    ; error = vld.error
+    ; read_bits_in = reader.read_bits_in
+    }
   ;;
 
   let hierarchical scope =

@@ -7,5 +7,6 @@
   hardcaml_jpeg
   hardcaml_jpeg_test
   hardcaml_waveterm.interactive)
+ (promote)
  (preprocess
   (pps ppx_jane)))

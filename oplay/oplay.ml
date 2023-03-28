@@ -6,8 +6,7 @@ module YuvFormat = struct
     [ "YUY2", Sdl.Pixel.format_yuy2
     ; "UYVY", Sdl.Pixel.format_uyvy
     ; "YVYU", Sdl.Pixel.format_yvyu
-    ; "422", Sdl.Pixel.format_yuy2
-      (* a bodge *)
+    ; "422", Sdl.Pixel.format_yuy2 (* a bodge *)
     ]
   ;;
 
@@ -486,7 +485,7 @@ let main () =
     in
     (* key presses *)
     let finish = ref false in
-    let redraw = ref true in
+    let redraw = ref false in
     let play = ref false in
     let key_presses key =
       let open Sdl.K in
@@ -629,7 +628,7 @@ let main () =
   with
   | Failure x ->
     do_cleanup ();
-    printf "FAILURE: %s\n" x;
+    printf "FAILURE: %s\n%!" x;
     exit (-1)
 ;;
 

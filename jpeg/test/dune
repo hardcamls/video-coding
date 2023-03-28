@@ -1,5 +1,12 @@
 (library
  (name hardcaml_jpeg_test)
- (inline_tests)
- (libraries core hardcaml hardcaml_waveterm hardcaml_jpeg_model hardcaml_jpeg)
- (preprocess (pps ppx_jane)))
+ (inline_tests
+  (deps Mouse480.jpg))
+ (libraries
+  core
+  hardcaml
+  hardcaml_waveterm
+  hardcaml_jpeg_model
+  hardcaml_jpeg)
+ (preprocess
+  (pps ppx_jane)))

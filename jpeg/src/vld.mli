@@ -2,6 +2,27 @@ open! Base
 open! Hardcaml
 
 module Core : sig
+  module Dqt : sig
+    module Header : sig
+      module Fields : sig
+        type 'a t =
+          { length : 'a
+          ; element_precision : 'a
+          ; table_identifier : 'a
+          }
+        [@@deriving sexp_of, hardcaml]
+      end
+    end
+
+    module Fields : sig
+      type 'a t =
+        { fields : 'a Header.Fields.t
+        ; element : 'a
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+  end
+
   module I : sig
     type 'a t =
       { clocking : 'a Clocking.t
@@ -31,6 +52,7 @@ module Core : sig
       ; run : 'a
       ; write : 'a
       ; read_bits : 'a
+      ; dqt : 'a Dqt.Fields.t
       ; error : 'a Error.t
       }
     [@@deriving sexp_of, hardcaml]
@@ -56,7 +78,9 @@ module With_reader : sig
       { coef : 'a
       ; run : 'a
       ; write : 'a
+      ; dqt : 'a Core.Dqt.Fields.t
       ; error : 'a Core.Error.t
+      ; read_bits_in : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
