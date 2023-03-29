@@ -5,19 +5,24 @@ module Vld = Hardcaml_jpeg.Vld.With_reader
 module Sim = Cyclesim.With_interface (Vld.I) (Vld.O)
 
 (* Uses Mosue480.jpg which is a tiny test jpeg we can use for tests. *)
-
 let load_jpeg () =
   In_channel.with_file ~binary:true "Mouse480.jpg" ~f:In_channel.input_all
 ;;
 
-let%expect_test "debug vld" =
+let test_vld ?(waves = true) bitstream =
   let sim =
     Sim.create
       ~config:Cyclesim.Config.trace_all
       (Vld.create
          (Scope.create ~auto_label_hierarchical_ports:true ~flatten_design:true ()))
   in
-  let waves, sim = Waveform.create sim in
+  let waves, sim =
+    if waves
+    then (
+      let waves, sim = Waveform.create sim in
+      Some waves, sim)
+    else None, sim
+  in
   let inputs = Cyclesim.inputs sim in
   let outputs = Cyclesim.outputs sim in
   inputs.clocking.clear := Bits.vdd;
@@ -27,30 +32,6 @@ let%expect_test "debug vld" =
   Cyclesim.cycle sim;
   inputs.start := Bits.gnd;
   inputs.bits_in_available := Bits.vdd;
-  let bitstream = load_jpeg () in
-  print_s [%message (String.subo ~len:300 ~pos:0 bitstream : String.Hexdump.t)];
-  [%expect
-    {|
-    ("String.subo ~len:300 ~pos:0 bitstream"
-     ("00000000  ff d8 ff e0 00 10 4a 46  49 46 00 01 01 01 00 48  |......JFIF.....H|"
-      "00000010  00 48 00 00 ff db 00 43  00 28 1c 1e 23 1e 19 28  |.H.....C.(..#..(|"
-      "00000020  23 21 23 2d 2b 28 30 3c  64 41 3c 37 37 3c 7b 58  |#!#-+(0<dA<77<{X|"
-      "00000030  5d 49 64 91 80 99 96 8f  80 8c 8a a0 b4 e6 c3 a0  |]Id.............|"
-      "00000040  aa da ad 8a 8c c8 ff cb  da ee f5 ff ff ff 9b c1  |................|"
-      "00000050  ff ff ff fa ff e6 fd ff  f8 ff db 00 43 01 2b 2d  |............C.+-|"
-      "00000060  2d 3c 35 3c 76 41 41 76  f8 a5 8c a5 f8 f8 f8 f8  |-<5<vAAv........|"
-      "00000070  f8 f8 f8 f8 f8 f8 f8 f8  f8 f8 f8 f8 f8 f8 f8 f8  |................|"
-      "00000080  f8 f8 f8 f8 f8 f8 f8 f8  f8 f8 f8 f8 f8 f8 f8 f8  |................|"
-      "00000090  f8 f8 f8 f8 f8 f8 f8 f8  f8 f8 f8 f8 f8 f8 ff c0  |................|"
-      "000000a0  00 11 08 01 40 01 e0 03  01 22 00 02 11 01 03 11  |....@....\"......|"
-      "000000b0  01 ff c4 00 1a 00 00 03  01 01 01 01 00 00 00 00  |................|"
-      "000000c0  00 00 00 00 00 00 00 01  02 03 04 05 06 ff c4 00  |................|"
-      "000000d0  2d 10 00 02 02 01 04 01  04 02 01 04 03 01 01 00  |-...............|"
-      "000000e0  00 00 00 01 02 11 21 03  12 31 41 51 04 13 22 61  |......!..1AQ..\"a|"
-      "000000f0  32 71 81 05 23 42 91 14  33 52 a1 c1 ff c4 00 16  |2q..#B..3R......|"
-      "00000100  01 01 01 01 00 00 00 00  00 00 00 00 00 00 00 00  |................|"
-      "00000110  00 00 01 02 ff c4 00 16  11 01 01 01 00 00 00 00  |................|"
-      "00000120  00 00 00 00 00 00 00 00  00 00 11 01              |............|")) |}];
   let pos = ref 0 in
   let cycles = ref 0 in
   while !pos < 300 && !cycles < 1_000 do
@@ -64,12 +45,36 @@ let%expect_test "debug vld" =
   done;
   Cyclesim.cycle sim;
   Cyclesim.cycle sim;
-  Waveform.print
-    ~display_width:120
-    ~display_height:150
-    ~wave_width:2
-    ~start_cycle:20
-    waves;
+  waves
+;;
+
+let%expect_test "debug vld" =
+  let bitstream = load_jpeg () in
+  print_s [%message (String.subo ~len:200 bitstream : String.Hexdump.t)];
+  [%expect{|
+    ("String.subo ~len:200 bitstream"
+     ("00000000  ff d8 ff e0 00 10 4a 46  49 46 00 01 01 01 00 48  |......JFIF.....H|"
+      "00000010  00 48 00 00 ff db 00 43  00 28 1c 1e 23 1e 19 28  |.H.....C.(..#..(|"
+      "00000020  23 21 23 2d 2b 28 30 3c  64 41 3c 37 37 3c 7b 58  |#!#-+(0<dA<77<{X|"
+      "00000030  5d 49 64 91 80 99 96 8f  80 8c 8a a0 b4 e6 c3 a0  |]Id.............|"
+      "00000040  aa da ad 8a 8c c8 ff cb  da ee f5 ff ff ff 9b c1  |................|"
+      "00000050  ff ff ff fa ff e6 fd ff  f8 ff db 00 43 01 2b 2d  |............C.+-|"
+      "00000060  2d 3c 35 3c 76 41 41 76  f8 a5 8c a5 f8 f8 f8 f8  |-<5<vAAv........|"
+      "00000070  f8 f8 f8 f8 f8 f8 f8 f8  f8 f8 f8 f8 f8 f8 f8 f8  |................|"
+      "00000080  f8 f8 f8 f8 f8 f8 f8 f8  f8 f8 f8 f8 f8 f8 f8 f8  |................|"
+      "00000090  f8 f8 f8 f8 f8 f8 f8 f8  f8 f8 f8 f8 f8 f8 ff c0  |................|"
+      "000000a0  00 11 08 01 40 01 e0 03  01 22 00 02 11 01 03 11  |....@....\"......|"
+      "000000b0  01 ff c4 00 1a 00 00 03  01 01 01 01 00 00 00 00  |................|"
+      "000000c0  00 00 00 00 00 00 00 01                           |........|")) |}];
+  let waves = test_vld bitstream in
+  Option.iter
+    waves
+    ~f:
+      (Waveform.print
+         ~display_width:120
+         ~display_height:150
+         ~wave_width:2
+         ~start_cycle:20);
   [%expect
     {|
     ┌Signals───────────┐┌Waves─────────────────────────────────────────────────────────────────────────────────────────────┐

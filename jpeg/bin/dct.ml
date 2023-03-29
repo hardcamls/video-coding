@@ -287,14 +287,13 @@ let command_hardware =
     ]
 ;;
 
-let () =
-  Command_unix.run
-    (Command.group
-       ~summary:"DCT tests"
-       [ "forward", command_forward
-       ; "inverse", command_inverse
-       ; "both", command_both
-       ; "search", command_search
-       ; "hardware", command_hardware
-       ])
+let command =
+  Command.group
+    ~summary:"DCT tests"
+    [ "forward", command_forward
+    ; "inverse", command_inverse
+    ; "both", command_both
+    ; "search", command_search
+    ; "hardware", command_hardware
+    ]
 ;;

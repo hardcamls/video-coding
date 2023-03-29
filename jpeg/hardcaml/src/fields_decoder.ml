@@ -1,6 +1,7 @@
 open! Base
 open Hardcaml
 open Signal
+module M = Fields_decoder_intf.M
 module Var = Always.Variable
 
 module Make (Fields : Interface.S) = struct
@@ -65,8 +66,8 @@ module Make (Fields : Interface.S) = struct
     }
   ;;
 
-  let hierarchical ~name scope =
+  let hierarchical ?name scope =
     let module Hier = Hierarchy.In_scope (I) (O) in
-    Hier.hierarchical ~scope ~name create
+    Hier.hierarchical ~scope ~name:(Option.value ~default:"flddec" name) create
   ;;
 end

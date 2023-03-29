@@ -105,8 +105,8 @@ module Dqt = struct
     }
   ;;
 
-  let hierarchical scope =
+  let hierarchical ?(name = "dqt") scope =
     let module Hier = Hierarchy.In_scope (I) (O) in
-    Hier.hierarchical ~scope ~name:"dqt" create
+    Hier.hierarchical ~scope ~name create
   ;;
 end

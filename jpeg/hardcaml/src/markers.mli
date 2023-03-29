@@ -1,5 +1,5 @@
 open! Base
-open Hardcaml
+open! Hardcaml
 
 module Dqt : sig
   module Header : sig
@@ -13,15 +13,6 @@ module Dqt : sig
     end
   end
 
-  module I : sig
-    type 'a t =
-      { clocking : 'a Clocking.t
-      ; start : 'a
-      ; bits : 'a
-      }
-    [@@deriving sexp_of, hardcaml]
-  end
-
   module Fields : sig
     type 'a t =
       { fields : 'a Header.Fields.t
@@ -30,15 +21,5 @@ module Dqt : sig
     [@@deriving sexp_of, hardcaml]
   end
 
-  module O : sig
-    type 'a t =
-      { read_bits : 'a
-      ; fields : 'a Fields.t
-      ; done_ : 'a
-      }
-    [@@deriving sexp_of, hardcaml]
-  end
-
-  val create : Scope.t -> Interface.Create_fn(I)(O).t
-  val hierarchical : Scope.t -> Interface.Create_fn(I)(O).t
+  include Fields_decoder.M(Fields).S
 end
