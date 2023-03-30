@@ -68,7 +68,7 @@ module Header = struct
   ;;
 end
 
-let create_code_table lengths values =
+let create_code_table lengths (values : int array array) =
   let rec build code length_pos =
     if length_pos = Array.length lengths
     then []

@@ -130,7 +130,6 @@ module Dri = struct
   ;;
 end
 
-(* Need to implement the Dht huffman table procedude, *)
 module Dht = struct
   type t =
     { length : int

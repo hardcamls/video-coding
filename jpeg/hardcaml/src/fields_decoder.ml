@@ -50,7 +50,7 @@ module Make (Fields : Interface.S) = struct
             ( name
             , Always.
                 [ read_bits <--. width
-                ; field <-- i.bits.:[width - 1, 0]
+                ; (field <-- if width = 16 then bswap i.bits else i.bits.:[width - 1, 0])
                 ; sm.set_next (State.next name)
                 ] )))
     in

@@ -25,13 +25,21 @@ module Core : sig
     val to_string : T.t -> string
   end
 
+  module All_markers : sig
+    type 'a t =
+      { sof : 'a Markers.Sof.Fields.t
+      ; dqt : 'a Markers.Dqt.Fields.t
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
   module O : sig
     type 'a t =
       { coef : 'a
       ; run : 'a
       ; write : 'a
       ; read_bits : 'a
-      ; dqt : 'a Markers.Dqt.Fields.t
+      ; markers : 'a All_markers.t
       ; error : 'a Error.t
       }
     [@@deriving sexp_of, hardcaml]
@@ -57,7 +65,7 @@ module With_reader : sig
       { coef : 'a
       ; run : 'a
       ; write : 'a
-      ; dqt : 'a Markers.Dqt.Fields.t
+      ; markers : 'a Core.All_markers.t
       ; error : 'a Core.Error.t
       ; read_bits_in : 'a
       }

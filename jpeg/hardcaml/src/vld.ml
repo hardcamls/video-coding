@@ -35,13 +35,21 @@ module Core = struct
     include Enum.Make_binary (T)
   end
 
+  module All_markers = struct
+    type 'a t =
+      { sof : 'a Markers.Sof.Fields.t [@rtlprefix "sof$"]
+      ; dqt : 'a Markers.Dqt.Fields.t [@rtlprefix "dqt$"]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
   module O = struct
     type 'a t =
       { coef : 'a [@bits 12]
       ; run : 'a [@bits 4]
       ; write : 'a
       ; read_bits : 'a [@bits 5] (* 0..16 *)
-      ; dqt : 'a Markers.Dqt.Fields.t
+      ; markers : 'a All_markers.t
       ; error : 'a Error.t [@rtlprefix "error_"]
       }
     [@@deriving sexp_of, hardcaml]
@@ -66,17 +74,21 @@ module Core = struct
     ignore (sm.current -- "STATE");
     let read_bits = Var.wire ~default:(zero 5) in
     let error = Error.Of_always.wire zero in
-    let set_error e =
+    let dqt = Markers.Dqt.O.Of_signal.wires () in
+    let start_dqt = Clocking.Var.reg i.clocking ~width:1 in
+    let sof = Markers.Sof.O.Of_signal.wires () in
+    let start_sof = Clocking.Var.reg i.clocking ~width:1 in
+    let _set_error e =
       Always.proc
         [ Error.Of_always.assign error (Error.of_enum (module Signal) e)
         ; sm.set_next Error
         ]
     in
-    let dqt = Markers.Dqt.O.Of_signal.wires () in
-    let start_dqt = Var.wire ~default:gnd in
     Always.(
       compile
-        [ read_bits <--. 0
+        [ Error.Of_always.assign error (Error.of_enum (module Signal) Ok)
+        ; start_dqt <-- gnd
+        ; start_sof <-- gnd
         ; sm.switch
             [ Start, [ when_ i.start [ sm.set_next Scan_markers ] ]
             ; ( Scan_markers
@@ -87,7 +99,9 @@ module Core = struct
                         (i.bits.:[7, 0] ==:. 0xff)
                         [ switch
                             i.bits.:[15, 8]
-                            ([ Marker_code.sof0, [ read_bits <--. 16; sm.set_next Sof ]
+                            ([ ( Marker_code.sof0
+                               , [ read_bits <--. 16; start_sof <-- vdd; sm.set_next Sof ]
+                               )
                              ; Marker_code.sos, [ read_bits <--. 16; sm.set_next Sos ]
                              ; ( Marker_code.dqt
                                , [ read_bits <--. 16; start_dqt <-- vdd; sm.set_next Dqt ]
@@ -99,7 +113,7 @@ module Core = struct
                         ]
                     ]
                 ] )
-            ; Sof, [ set_error Decode_error ]
+            ; Sof, [ when_ sof.done_ [ sm.set_next Scan_markers ] ]
             ; Sos, []
             ; Dqt, [ when_ dqt.done_ [ sm.set_next Scan_markers ] ]
             ; Dht, []
@@ -112,16 +126,23 @@ module Core = struct
       (Markers.Dqt.hierarchical
          scope
          { Markers.Dqt.I.clocking = i.clocking; start = start_dqt.value; bits = i.bits });
+    Markers.Sof.O.Of_signal.assign
+      sof
+      (Markers.Sof.hierarchical
+         scope
+         { Markers.Sof.I.clocking = i.clocking; start = start_sof.value; bits = i.bits });
     let read_bits =
       priority_select_with_default
-        [ { valid = ~:(dqt.done_); value = dqt.read_bits } ]
+        [ { valid = ~:(dqt.done_); value = dqt.read_bits }
+        ; { valid = ~:(sof.done_); value = sof.read_bits }
+        ]
         ~default:read_bits.value
     in
     { O.coef = zero 12
     ; run = zero 4
-    ; write = gnd (* ; read_bits = Clocking.reg i.clocking read_bits *)
+    ; write = gnd
     ; read_bits
-    ; dqt = dqt.fields
+    ; markers = { dqt = dqt.fields; sof = sof.fields }
     ; error = Error.Of_always.value error
     }
   ;;
@@ -148,7 +169,7 @@ module With_reader = struct
       { coef : 'a [@bits 12]
       ; run : 'a [@bits 4]
       ; write : 'a
-      ; dqt : 'a Markers.Dqt.Fields.t
+      ; markers : 'a Core.All_markers.t
       ; error : 'a Core.Error.t [@rtlprefix "error_"]
       ; read_bits_in : 'a
       }
@@ -181,7 +202,7 @@ module With_reader = struct
     { O.coef = vld.coef
     ; run = vld.run
     ; write = vld.write
-    ; dqt = vld.dqt
+    ; markers = vld.markers
     ; error = vld.error
     ; read_bits_in = reader.read_bits_in
     }
