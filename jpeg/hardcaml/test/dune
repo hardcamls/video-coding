@@ -10,4 +10,4 @@
   hardcaml_jpeg_model_test
   hardcaml_jpeg)
  (preprocess
-  (pps ppx_jane)))
+  (pps ppx_jane ppx_deriving_hardcaml)))
