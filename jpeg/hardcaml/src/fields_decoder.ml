@@ -2,26 +2,11 @@ open! Base
 open Hardcaml
 open Signal
 module M = Fields_decoder_intf.M
+module Ports = Fields_decoder_intf.Ports
 module Var = Always.Variable
 
 module Make (Fields : Interface.S) = struct
-  module I = struct
-    type 'a t =
-      { clocking : 'a Clocking.t
-      ; start : 'a
-      ; bits : 'a [@bits 16]
-      }
-    [@@deriving sexp_of, hardcaml]
-  end
-
-  module O = struct
-    type 'a t =
-      { read_bits : 'a [@bits 5]
-      ; fields : 'a Fields.t
-      ; done_ : 'a
-      }
-    [@@deriving sexp_of, hardcaml]
-  end
+  include Ports (Fields)
 
   module State = struct
     type t = string [@@deriving sexp_of, compare]

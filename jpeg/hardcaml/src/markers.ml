@@ -33,15 +33,6 @@ module Sof = struct
     include Fields_decoder.Make (Fields)
   end
 
-  module I = struct
-    type 'a t =
-      { clocking : 'a Clocking.t
-      ; start : 'a
-      ; bits : 'a [@bits 16]
-      }
-    [@@deriving sexp_of, hardcaml]
-  end
-
   let component_address_bits = 2
 
   module Fields = struct
@@ -54,14 +45,7 @@ module Sof = struct
     [@@deriving sexp_of, hardcaml]
   end
 
-  module O = struct
-    type 'a t =
-      { read_bits : 'a [@bits 5]
-      ; fields : 'a Fields.t
-      ; done_ : 'a
-      }
-    [@@deriving sexp_of, hardcaml]
-  end
+  include Fields_decoder.Ports (Fields)
 
   module State = struct
     type t =
@@ -159,15 +143,6 @@ module Dqt = struct
     include Fields_decoder.Make (Fields)
   end
 
-  module I = struct
-    type 'a t =
-      { clocking : 'a Clocking.t
-      ; start : 'a
-      ; bits : 'a [@bits 16]
-      }
-    [@@deriving sexp_of, hardcaml]
-  end
-
   module Fields = struct
     type 'a t =
       { fields : 'a Header.Fields.t
@@ -178,14 +153,7 @@ module Dqt = struct
     [@@deriving sexp_of, hardcaml]
   end
 
-  module O = struct
-    type 'a t =
-      { read_bits : 'a [@bits 5]
-      ; fields : 'a Fields.t
-      ; done_ : 'a
-      }
-    [@@deriving sexp_of, hardcaml]
-  end
+  include Fields_decoder.Ports (Fields)
 
   module State = struct
     type t =
@@ -233,6 +201,121 @@ module Dqt = struct
   ;;
 
   let hierarchical ?(name = "dqt") scope =
+    let module Hier = Hierarchy.In_scope (I) (O) in
+    Hier.hierarchical ~scope ~name create
+  ;;
+end
+
+module Dht = struct
+  module Header = struct
+    module Fields = struct
+      type 'a t =
+        { length : 'a [@bits 16]
+        ; table_class : 'a [@bits 4]
+        ; destination_identifier : 'a [@bits 4]
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
+    include Fields_decoder.Make (Fields)
+  end
+
+  module Fields = struct
+    type 'a t =
+      { header : 'a Header.Fields.t [@rtlprefix "hdr$"]
+      ; length : 'a [@bits 8]
+      ; length_address : 'a [@bits 4]
+      ; length_write : 'a
+      ; value : 'a [@bits 8]
+      ; value_index : 'a [@bits 4]
+      ; value_address : 'a [@bits 8]
+      ; value_write : 'a
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  include Fields_decoder.Ports (Fields)
+
+  module State = struct
+    type t =
+      | Start
+      | Header
+      | Lengths
+      | Values
+    [@@deriving sexp_of, enumerate, compare]
+  end
+
+  let create scope (i : _ I.t) =
+    let ( -- ) = Scope.naming scope in
+    let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
+    let done_ = Var.wire ~default:gnd in
+    let header = Header.O.Of_signal.wires () in
+    let count4 = Clocking.Var.reg i.clocking ~width:4 in
+    let count4_next = count4.value +:. 1 in
+    let count8 = Clocking.Var.reg i.clocking ~width:8 in
+    let count8_next = count8.value +:. 1 in
+    let length_write = Var.wire ~default:gnd in
+    let length_read = Var.wire ~default:gnd in
+    let value_write = Var.wire ~default:gnd in
+    let lengths =
+      Clocking.pipeline
+        i.clocking
+        ~enable:(length_write.value |: length_read.value)
+        ~n:16
+        i.bits.:[7, 0]
+      -- "LENGTHS"
+    in
+    let length_is_zero = lengths ==:. 0 in
+    Always.(
+      compile
+        [ sm.switch
+            [ ( Start
+              , [ done_ <-- vdd; when_ i.start [ done_ <-- gnd; sm.set_next Header ] ] )
+            ; Header, [ when_ header.done_ [ sm.set_next Lengths; count4 <--. 0 ] ]
+            ; ( Lengths
+              , [ count4 <-- count4_next
+                ; length_write <-- vdd
+                ; when_ (count4.value ==:. 15) [ count4 <--. 0; sm.set_next Values ]
+                ] )
+            ; ( Values
+              , [ count8 <-- count8_next
+                ; value_write <-- ~:length_is_zero
+                ; when_
+                    (count8_next ==: lengths |: length_is_zero)
+                    [ length_read <-- vdd
+                    ; count4 <-- count4_next
+                    ; count8 <--. 0
+                    ; when_ (count4.value ==:. 15) [ sm.set_next Start ]
+                    ]
+                ] )
+            ]
+        ]);
+    Header.O.Of_signal.assign
+      header
+      (Header.hierarchical
+         scope
+         ~name:"dhthdr"
+         { Header.I.clocking = i.clocking; start = i.start; bits = i.bits });
+    { O.read_bits =
+        mux2
+          (value_write.value |: length_write.value)
+          (of_int ~width:5 8)
+          header.read_bits
+    ; fields =
+        { header = header.fields
+        ; length = lengths
+        ; length_address = i.bits.:[3, 0]
+        ; length_write = length_write.value
+        ; value = i.bits.:[7, 0]
+        ; value_index = count4.value
+        ; value_address = count8.value
+        ; value_write = value_write.value
+        }
+    ; done_ = done_.value
+    }
+  ;;
+
+  let hierarchical ?(name = "dht") scope =
     let module Hier = Hierarchy.In_scope (I) (O) in
     Hier.hierarchical ~scope ~name create
   ;;

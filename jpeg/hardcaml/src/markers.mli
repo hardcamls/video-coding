@@ -64,3 +64,32 @@ module Dqt : sig
 
   include Fields_decoder.M(Fields).S
 end
+
+module Dht : sig
+  module Header : sig
+    module Fields : sig
+      type 'a t =
+        { length : 'a
+        ; table_class : 'a
+        ; destination_identifier : 'a
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+  end
+
+  module Fields : sig
+    type 'a t =
+      { header : 'a Header.Fields.t
+      ; length : 'a
+      ; length_address : 'a
+      ; length_write : 'a
+      ; value : 'a
+      ; value_index : 'a
+      ; value_address : 'a
+      ; value_write : 'a
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  include Fields_decoder.M(Fields).S
+end
