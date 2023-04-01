@@ -220,16 +220,24 @@ module Dht = struct
     include Fields_decoder.Make (Fields)
   end
 
+  module Code = struct
+    type 'a t =
+      { code_length_minus1 : 'a [@bits 4]
+      ; num_codes_at_length : 'a [@bits 8]
+      ; code : 'a [@bits 16]
+      ; code_base_address : 'a [@bits 16]
+      ; code_write : 'a
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
   module Fields = struct
     type 'a t =
       { header : 'a Header.Fields.t [@rtlprefix "hdr$"]
-      ; length : 'a [@bits 8]
-      ; length_address : 'a [@bits 4]
-      ; length_write : 'a
-      ; value : 'a [@bits 8]
-      ; value_index : 'a [@bits 4]
-      ; value_address : 'a [@bits 8]
-      ; value_write : 'a
+      ; data : 'a [@bits 8]
+      ; data_address : 'a [@bits 16]
+      ; data_write : 'a
+      ; code : 'a Code.t
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -246,47 +254,40 @@ module Dht = struct
   end
 
   let create scope (i : _ I.t) =
-    let ( -- ) = Scope.naming scope in
+    (* let ( -- ) = Scope.naming scope in *)
     let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
     let done_ = Var.wire ~default:gnd in
     let header = Header.O.Of_signal.wires () in
     let count4 = Clocking.Var.reg i.clocking ~width:4 in
     let count4_next = count4.value +:. 1 in
-    let count8 = Clocking.Var.reg i.clocking ~width:8 in
-    let count8_next = count8.value +:. 1 in
-    let length_write = Var.wire ~default:gnd in
-    let length_read = Var.wire ~default:gnd in
-    let value_write = Var.wire ~default:gnd in
-    let lengths =
-      Clocking.pipeline
-        i.clocking
-        ~enable:(length_write.value |: length_read.value)
-        ~n:16
-        i.bits.:[7, 0]
-      -- "LENGTHS"
-    in
-    let length_is_zero = lengths ==:. 0 in
+    let address = Clocking.Var.reg i.clocking ~width:16 in
+    let address_next = address.value +:. 1 in
+    let total_codes = Clocking.Var.reg i.clocking ~width:16 in
+    let code = Clocking.Var.reg i.clocking ~width:16 in
+    let code_write = Var.wire ~default:gnd in
+    let data_write = Var.wire ~default:gnd in
+    let num_codes_at_length = i.bits.:[7, 0] in
     Always.(
       compile
         [ sm.switch
             [ ( Start
               , [ done_ <-- vdd; when_ i.start [ done_ <-- gnd; sm.set_next Header ] ] )
-            ; Header, [ when_ header.done_ [ sm.set_next Lengths; count4 <--. 0 ] ]
+            ; ( Header
+              , [ when_ header.done_ [ sm.set_next Lengths; code <--. 0; count4 <--. 0 ] ]
+              )
             ; ( Lengths
               , [ count4 <-- count4_next
-                ; length_write <-- vdd
-                ; when_ (count4.value ==:. 15) [ count4 <--. 0; sm.set_next Values ]
+                ; code <-- sll (code.value +: uresize num_codes_at_length 16) 1
+                ; total_codes <-- total_codes.value +: uresize num_codes_at_length 16
+                ; code_write <-- vdd
+                ; when_
+                    (count4.value ==:. 15)
+                    [ address <--. 0; count4 <--. 0; sm.set_next Values ]
                 ] )
             ; ( Values
-              , [ count8 <-- count8_next
-                ; value_write <-- ~:length_is_zero
-                ; when_
-                    (count8_next ==: lengths |: length_is_zero)
-                    [ length_read <-- vdd
-                    ; count4 <-- count4_next
-                    ; count8 <--. 0
-                    ; when_ (count4.value ==:. 15) [ sm.set_next Start ]
-                    ]
+              , [ address <-- address_next
+                ; data_write <-- vdd
+                ; when_ (address_next ==: total_codes.value) [ sm.set_next Start ]
                 ] )
             ]
         ]);
@@ -297,19 +298,19 @@ module Dht = struct
          ~name:"dhthdr"
          { Header.I.clocking = i.clocking; start = i.start; bits = i.bits });
     { O.read_bits =
-        mux2
-          (value_write.value |: length_write.value)
-          (of_int ~width:5 8)
-          header.read_bits
+        mux2 (data_write.value |: code_write.value) (of_int ~width:5 8) header.read_bits
     ; fields =
         { header = header.fields
-        ; length = lengths
-        ; length_address = i.bits.:[3, 0]
-        ; length_write = length_write.value
-        ; value = i.bits.:[7, 0]
-        ; value_index = count4.value
-        ; value_address = count8.value
-        ; value_write = value_write.value
+        ; data = i.bits.:[7, 0]
+        ; data_address = address.value
+        ; data_write = data_write.value
+        ; code =
+            { code_length_minus1 = count4.value
+            ; num_codes_at_length
+            ; code = code.value
+            ; code_base_address = total_codes.value
+            ; code_write = code_write.value
+            }
         }
     ; done_ = done_.value
     }

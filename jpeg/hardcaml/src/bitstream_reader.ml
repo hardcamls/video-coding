@@ -29,7 +29,8 @@ let or_0 s a = mux2 s a (zero (width a))
 (* We maintain a 48 bit internal buffer where upto 16 bits can be input and
    output per cycle. Note that a 32 bit buffer doesn't work so well as it stalls
    a lot. *)
-let create _scope (i : _ I.t) =
+let create scope (i : _ I.t) =
+  let ( -- ) = Scope.naming scope in
   (* Add and/or subtract bits from the buffer *)
   let bits_available = wire 6 in
   (* Bits are available at the output *)

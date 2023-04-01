@@ -77,16 +77,24 @@ module Dht : sig
     end
   end
 
+  module Code : sig
+    type 'a t =
+      { code_length_minus1 : 'a
+      ; num_codes_at_length : 'a
+      ; code : 'a
+      ; code_base_address : 'a
+      ; code_write : 'a
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
   module Fields : sig
     type 'a t =
       { header : 'a Header.Fields.t
-      ; length : 'a
-      ; length_address : 'a
-      ; length_write : 'a
-      ; value : 'a
-      ; value_index : 'a
-      ; value_address : 'a
-      ; value_write : 'a
+      ; data : 'a
+      ; data_address : 'a
+      ; data_write : 'a
+      ; code : 'a Code.t
       }
     [@@deriving sexp_of, hardcaml]
   end
