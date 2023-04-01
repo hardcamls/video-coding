@@ -38,7 +38,9 @@ module Core = struct
   module All_markers = struct
     type 'a t =
       { sof : 'a Markers.Sof.Fields.t [@rtlprefix "sof$"]
+      ; sos : 'a Markers.Sos.Fields.t [@rtlprefix "sos$"]
       ; dqt : 'a Markers.Dqt.Fields.t [@rtlprefix "dqt$"]
+      ; dht : 'a Markers.Dht.Fields.t [@rtlprefix "dht$"]
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -74,10 +76,14 @@ module Core = struct
     ignore (sm.current -- "STATE");
     let read_bits = Var.wire ~default:(zero 5) in
     let error = Error.Of_always.wire zero in
+    let dht = Markers.Dht.O.Of_signal.wires () in
+    let start_dht = Clocking.Var.reg i.clocking ~width:1 in
     let dqt = Markers.Dqt.O.Of_signal.wires () in
     let start_dqt = Clocking.Var.reg i.clocking ~width:1 in
     let sof = Markers.Sof.O.Of_signal.wires () in
     let start_sof = Clocking.Var.reg i.clocking ~width:1 in
+    let sos = Markers.Sos.O.Of_signal.wires () in
+    let start_sos = Clocking.Var.reg i.clocking ~width:1 in
     let _set_error e =
       Always.proc
         [ Error.Of_always.assign error (Error.of_enum (module Signal) e)
@@ -87,8 +93,10 @@ module Core = struct
     Always.(
       compile
         [ Error.Of_always.assign error (Error.of_enum (module Signal) Ok)
+        ; start_dht <-- gnd
         ; start_dqt <-- gnd
         ; start_sof <-- gnd
+        ; start_sos <-- gnd
         ; sm.switch
             [ Start, [ when_ i.start [ sm.set_next Scan_markers ] ]
             ; ( Scan_markers
@@ -102,11 +110,15 @@ module Core = struct
                             ([ ( Marker_code.sof0
                                , [ read_bits <--. 16; start_sof <-- vdd; sm.set_next Sof ]
                                )
-                             ; Marker_code.sos, [ read_bits <--. 16; sm.set_next Sos ]
+                             ; ( Marker_code.sos
+                               , [ read_bits <--. 16; start_sos <-- vdd; sm.set_next Sos ]
+                               )
                              ; ( Marker_code.dqt
                                , [ read_bits <--. 16; start_dqt <-- vdd; sm.set_next Dqt ]
                                )
-                             ; Marker_code.dht, [ read_bits <--. 16; sm.set_next Dht ]
+                             ; ( Marker_code.dht
+                               , [ read_bits <--. 16; start_dht <-- vdd; sm.set_next Dht ]
+                               )
                              ; Marker_code.dri, [ read_bits <--. 16 ]
                              ]
                             |> List.map ~f:(fun (s, c) -> Signal.of_int ~width:8 s, c))
@@ -114,13 +126,18 @@ module Core = struct
                     ]
                 ] )
             ; Sof, [ when_ sof.done_ [ sm.set_next Scan_markers ] ]
-            ; Sos, []
+            ; Sos, [ when_ sos.done_ [ sm.set_next Scan_markers ] ]
             ; Dqt, [ when_ dqt.done_ [ sm.set_next Scan_markers ] ]
-            ; Dht, []
+            ; Dht, [ when_ dht.done_ [ sm.set_next Scan_markers ] ]
             ; Dri, []
             ; Error, []
             ]
         ]);
+    Markers.Dht.O.Of_signal.assign
+      dht
+      (Markers.Dht.hierarchical
+         scope
+         { Markers.Dht.I.clocking = i.clocking; start = start_dht.value; bits = i.bits });
     Markers.Dqt.O.Of_signal.assign
       dqt
       (Markers.Dqt.hierarchical
@@ -131,10 +148,17 @@ module Core = struct
       (Markers.Sof.hierarchical
          scope
          { Markers.Sof.I.clocking = i.clocking; start = start_sof.value; bits = i.bits });
+    Markers.Sos.O.Of_signal.assign
+      sos
+      (Markers.Sos.hierarchical
+         scope
+         { Markers.Sos.I.clocking = i.clocking; start = start_sos.value; bits = i.bits });
     let read_bits =
       priority_select_with_default
-        [ { valid = ~:(dqt.done_); value = dqt.read_bits }
+        [ { valid = ~:(dht.done_); value = dht.read_bits }
+        ; { valid = ~:(dqt.done_); value = dqt.read_bits }
         ; { valid = ~:(sof.done_); value = sof.read_bits }
+        ; { valid = ~:(sos.done_); value = sos.read_bits }
         ]
         ~default:read_bits.value
     in
@@ -142,7 +166,7 @@ module Core = struct
     ; run = zero 4
     ; write = gnd
     ; read_bits
-    ; markers = { dqt = dqt.fields; sof = sof.fields }
+    ; markers = { dht = dht.fields; dqt = dqt.fields; sof = sof.fields; sos = sos.fields }
     ; error = Error.Of_always.value error
     }
   ;;

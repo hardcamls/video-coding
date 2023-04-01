@@ -40,6 +40,53 @@ module Sof : sig
   include Fields_decoder.M(Fields).S
 end
 
+module Scan_selector : sig
+  module Fields : sig
+    type 'a t =
+      { selector : 'a
+      ; dc_coef_selector : 'a
+      ; ac_coef_selector : 'a
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+end
+
+module Sos : sig
+  module Header : sig
+    module Fields : sig
+      type 'a t =
+        { length : 'a
+        ; number_of_image_components : 'a
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+  end
+
+  module Footer : sig
+    module Fields : sig
+      type 'a t =
+        { start_of_predictor_selection : 'a
+        ; end_of_predictor_selection : 'a
+        ; successive_approximation_bit_high : 'a
+        ; successive_approximation_bit_low : 'a
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+  end
+
+  module Fields : sig
+    type 'a t =
+      { header : 'a Header.Fields.t
+      ; scan_selector : 'a Scan_selector.Fields.t
+      ; write_scan_selector : 'a
+      ; footer : 'a Footer.Fields.t
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  include Fields_decoder.M(Fields).S
+end
+
 module Dqt : sig
   module Header : sig
     module Fields : sig

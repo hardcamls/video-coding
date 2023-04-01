@@ -28,7 +28,9 @@ module Core : sig
   module All_markers : sig
     type 'a t =
       { sof : 'a Markers.Sof.Fields.t
+      ; sos : 'a Markers.Sos.Fields.t
       ; dqt : 'a Markers.Dqt.Fields.t
+      ; dht : 'a Markers.Dht.Fields.t
       }
     [@@deriving sexp_of, hardcaml]
   end

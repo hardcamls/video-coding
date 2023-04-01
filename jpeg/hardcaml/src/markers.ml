@@ -127,6 +127,146 @@ module Sof = struct
   ;;
 end
 
+module Scan_selector = struct
+  module Fields = struct
+    type 'a t =
+      { selector : 'a [@bits 8]
+      ; dc_coef_selector : 'a [@bits 4]
+      ; ac_coef_selector : 'a [@bits 4]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  include Fields_decoder.Make (Fields)
+end
+
+module Sos = struct
+  module Header = struct
+    module Fields = struct
+      type 'a t =
+        { length : 'a [@bits 16]
+        ; number_of_image_components : 'a [@bits 8]
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
+    include Fields_decoder.Make (Fields)
+  end
+
+  module Footer = struct
+    module Fields = struct
+      type 'a t =
+        { start_of_predictor_selection : 'a [@bits 8]
+        ; end_of_predictor_selection : 'a [@bits 8]
+        ; successive_approximation_bit_high : 'a [@bits 4]
+        ; successive_approximation_bit_low : 'a [@bits 4]
+        }
+      [@@deriving sexp_of, hardcaml]
+    end
+
+    include Fields_decoder.Make (Fields)
+  end
+
+  module Fields = struct
+    type 'a t =
+      { header : 'a Header.Fields.t
+      ; scan_selector : 'a Scan_selector.Fields.t
+      ; write_scan_selector : 'a
+      ; footer : 'a Footer.Fields.t
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  include Fields_decoder.Ports (Fields)
+
+  module State = struct
+    type t =
+      | Start
+      | Header
+      | Scans
+      | Footer
+    [@@deriving sexp_of, enumerate, compare]
+  end
+
+  let create scope (i : _ I.t) =
+    let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
+    let header = Header.O.Of_signal.wires () in
+    let scan_selector = Scan_selector.O.Of_signal.wires () in
+    let footer = Footer.O.Of_signal.wires () in
+    let done_ = Var.wire ~default:gnd in
+    let start_scan = Clocking.Var.reg i.clocking ~width:1 in
+    let start_footer = Clocking.Var.reg i.clocking ~width:1 in
+    let number_of_scans = Clocking.Var.reg i.clocking ~width:8 in
+    let number_of_scans_next = number_of_scans.value +:. 1 in
+    let write_scan_selector = Var.wire ~default:gnd in
+    Always.(
+      compile
+        [ start_scan <-- gnd
+        ; start_footer <-- gnd
+        ; sm.switch
+            [ ( Start
+              , [ done_ <-- vdd
+                ; number_of_scans <--. 0
+                ; when_ i.start [ sm.set_next Header ]
+                ] )
+            ; Header, [ when_ header.done_ [ start_scan <-- vdd; sm.set_next Scans ] ]
+            ; ( Scans
+              , [ when_
+                    (~:(start_scan.value) &: scan_selector.done_)
+                    [ number_of_scans <-- number_of_scans_next
+                    ; write_scan_selector <-- vdd
+                    ; if_
+                        (number_of_scans_next ==: header.fields.number_of_image_components)
+                        [ start_footer <-- vdd; sm.set_next Footer ]
+                        [ start_scan <-- vdd ]
+                    ]
+                ] )
+            ; Footer, [ when_ footer.done_ [ sm.set_next Start ] ]
+            ]
+        ]);
+    Header.O.Of_signal.assign
+      header
+      (Header.create
+         scope
+         { Header.I.clocking = i.clocking; start = i.start; bits = i.bits });
+    Scan_selector.O.Of_signal.assign
+      scan_selector
+      (Scan_selector.create
+         scope
+         { Scan_selector.I.clocking = i.clocking
+         ; start = start_scan.value
+         ; bits = i.bits
+         });
+    Footer.O.Of_signal.assign
+      footer
+      (Footer.create
+         scope
+         { Footer.I.clocking = i.clocking; start = start_footer.value; bits = i.bits });
+    { O.read_bits =
+        priority_select_with_default
+          ~default:(zero 5)
+          [ { valid = ~:(header.done_) |: i.start; value = header.read_bits }
+          ; { valid = ~:(scan_selector.done_) |: start_scan.value
+            ; value = scan_selector.read_bits
+            }
+          ; { valid = ~:(footer.done_) |: start_footer.value; value = footer.read_bits }
+          ]
+    ; fields =
+        { Fields.header = header.fields
+        ; scan_selector = scan_selector.fields
+        ; write_scan_selector = write_scan_selector.value
+        ; footer = footer.fields
+        }
+    ; done_ = done_.value
+    }
+  ;;
+
+  let hierarchical ?(name = "sos") scope =
+    let module Hier = Hierarchy.In_scope (I) (O) in
+    Hier.hierarchical ~scope ~name create
+  ;;
+end
+
 module Dqt = struct
   (* 8 bit, 64 element tables only. *)
 
@@ -273,8 +413,14 @@ module Dht = struct
             [ ( Start
               , [ done_ <-- vdd; when_ i.start [ done_ <-- gnd; sm.set_next Header ] ] )
             ; ( Header
-              , [ when_ header.done_ [ sm.set_next Lengths; code <--. 0; count4 <--. 0 ] ]
-              )
+              , [ when_
+                    header.done_
+                    [ sm.set_next Lengths
+                    ; code <--. 0
+                    ; total_codes <--. 0
+                    ; count4 <--. 0
+                    ]
+                ] )
             ; ( Lengths
               , [ count4 <-- count4_next
                 ; code <-- sll (code.value +: uresize num_codes_at_length 16) 1
