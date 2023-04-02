@@ -1,3 +1,19 @@
+(* XX The marker codes here can be dramatically simplified.  Their structure is 
+   generally just byte orientated and we dont need to use a variable width bitstream 
+   reader here.  We could just stream bytes and provide a window on top of them to 
+   decode.  Ok, some some added complexity in a couple of places where we decode 
+   variable length arrays - but that would be manageable.  The interface types we've
+   defined here should still all work.
+
+   The key reason for such a rewrite is to reduce the combinational load on the
+   bitstream reader (which also needs to be restructured) which is currently 
+   *seriously* excessive.
+
+   But anyway, it works for now...at least until we *have* to deal with the xff 
+   stuffing byte issue in the entropy coded segments where things will get hairy.  
+   But I'd like to get a bit further into the decoding process first.
+*)
+
 open! Base
 open Hardcaml
 open Signal
@@ -207,7 +223,7 @@ module Sos = struct
             [ ( Start
               , [ done_ <-- vdd
                 ; number_of_scans <--. 0
-                ; when_ i.start [ sm.set_next Header ]
+                ; when_ i.start [ done_ <-- gnd; sm.set_next Header ]
                 ] )
             ; Header, [ when_ header.done_ [ start_scan <-- vdd; sm.set_next Scans ] ]
             ; ( Scans
@@ -226,30 +242,31 @@ module Sos = struct
         ]);
     Header.O.Of_signal.assign
       header
-      (Header.create
+      (Header.hierarchical
          scope
+         ~name:"soshdr"
          { Header.I.clocking = i.clocking; start = i.start; bits = i.bits });
     Scan_selector.O.Of_signal.assign
       scan_selector
-      (Scan_selector.create
+      (Scan_selector.hierarchical
          scope
+         ~name:"sosscan"
          { Scan_selector.I.clocking = i.clocking
          ; start = start_scan.value
          ; bits = i.bits
          });
     Footer.O.Of_signal.assign
       footer
-      (Footer.create
+      (Footer.hierarchical
          scope
+         ~name:"sosftr"
          { Footer.I.clocking = i.clocking; start = start_footer.value; bits = i.bits });
     { O.read_bits =
         priority_select_with_default
           ~default:(zero 5)
-          [ { valid = ~:(header.done_) |: i.start; value = header.read_bits }
-          ; { valid = ~:(scan_selector.done_) |: start_scan.value
-            ; value = scan_selector.read_bits
-            }
-          ; { valid = ~:(footer.done_) |: start_footer.value; value = footer.read_bits }
+          [ { valid = ~:(header.done_); value = header.read_bits }
+          ; { valid = ~:(scan_selector.done_); value = scan_selector.read_bits }
+          ; { valid = ~:(footer.done_); value = footer.read_bits }
           ]
     ; fields =
         { Fields.header = header.fields

@@ -38,13 +38,12 @@ let decoder ~length scope (i : _ I.t) =
       ~f:
         (Clocking.reg
            i.clocking
-           ~enable:(i.code_in.code_write &: i.code_in.code_length_minus1 ==:. length - 1))
+           ~enable:(i.code_in.code_write &: (i.code_in.code_length_minus1 ==:. length - 1)))
   in
   let code_max =
     Clocking.reg
       i.clocking
-      Uop.(code.code.:[length - 1, 0] +: code.num_codes_at_length.:[length - 1, 0] -:. 1).:[
-      length - 1, 0]
+      Uop.(code.code.:[length - 1, 0] +: code.num_codes_at_length -:. 1).:[length - 1, 0]
     -- "code_max"
   in
   let has_codes_at_length =
@@ -52,11 +51,9 @@ let decoder ~length scope (i : _ I.t) =
   in
   let bits = i.bits.:[length - 1, 0] -- "bits" in
   let valid =
-    bits
-    >=: code.code.:[length - 1, 0]
-    &: bits
-    <=: code_max
-    &: has_codes_at_length -- "valid"
+    let gte_min = bits >=: code.code.:[length - 1, 0] in
+    let lte_max = bits <=: code_max in
+    (gte_min &: lte_max &: has_codes_at_length) -- "valid"
   in
   let offset = code.code_base_address +: uresize bits 16 -- "offset" in
   let length = Signal.of_int ~width:5 length in
@@ -72,7 +69,7 @@ let create scope (i : _ I.t) =
   { O.matches = valid; decoded = value }
 ;;
 
-let hierarchical scope =
+let hierarchical scope ~name =
   let module Hier = Hierarchy.In_scope (I) (O) in
-  Hier.hierarchical ~scope ~name:"cwdec" create
+  Hier.hierarchical ~scope ~name create
 ;;
