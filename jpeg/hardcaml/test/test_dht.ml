@@ -32,12 +32,13 @@ let test ?(verbose = false) ~start_cycle nth_marker =
       in
       if code.num_codes_at_length <> 0
       then print_s [%message (code : int Hardcaml_jpeg.Markers.Dht.Code.t)]);
-    if Bits.to_bool !(outputs.fields.data_write)
+    if Bits.to_bool !(outputs.fields.code_data.data_write)
     then (
-      let data = Bits.to_int !(outputs.fields.data) in
-      let length = 1 + Bits.to_int !(outputs.fields.code.code_length_minus1) in
-      let address = Bits.to_int !(outputs.fields.data_address) in
-      print_s [%message "data" (data : int) (length : int) (address : int)])
+      let data =
+        Hardcaml_jpeg.Markers.Dht.Code_data.map outputs.fields.code_data ~f:(fun d ->
+            Bits.to_int !d)
+      in
+      print_s [%message (data : int Hardcaml_jpeg.Markers.Dht.Code_data.t)])
   in
   let waves = Dht.test ~waves:true ~on_cycle dht_bits in
   Option.iter
@@ -67,13 +68,13 @@ let%expect_test "1st marker" =
     (code
      ((code_length_minus1 5) (num_codes_at_length 1) (code 62)
       (code_base_address 6) (code_write 1)))
-    (data (data 0) (length 1) (address 0))
-    (data (data 1) (length 1) (address 1))
-    (data (data 2) (length 1) (address 2))
-    (data (data 3) (length 1) (address 3))
-    (data (data 4) (length 1) (address 4))
-    (data (data 5) (length 1) (address 5))
-    (data (data 6) (length 1) (address 6))
+    (data ((data 0) (data_address 0) (data_write 1)))
+    (data ((data 1) (data_address 1) (data_write 1)))
+    (data ((data 2) (data_address 2) (data_write 1)))
+    (data ((data 3) (data_address 3) (data_write 1)))
+    (data ((data 4) (data_address 4) (data_write 1)))
+    (data ((data 5) (data_address 5) (data_write 1)))
+    (data ((data 6) (data_address 6) (data_write 1)))
     ┌Signals───────────┐┌Waves─────────────────────────────────────────────────────────────────────────────────────────────────────┐
     │clock             ││┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐│
     │                  ││   └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └│
@@ -170,32 +171,32 @@ let%expect_test "2nd marker" =
     (code
      ((code_length_minus1 12) (num_codes_at_length 1) (code 8190)
       (code_base_address 25) (code_write 1)))
-    (data (data 0) (length 1) (address 0))
-    (data (data 1) (length 1) (address 1))
-    (data (data 2) (length 1) (address 2))
-    (data (data 17) (length 1) (address 3))
-    (data (data 33) (length 1) (address 4))
-    (data (data 3) (length 1) (address 5))
-    (data (data 18) (length 1) (address 6))
-    (data (data 49) (length 1) (address 7))
-    (data (data 65) (length 1) (address 8))
-    (data (data 81) (length 1) (address 9))
-    (data (data 4) (length 1) (address 10))
-    (data (data 19) (length 1) (address 11))
-    (data (data 34) (length 1) (address 12))
-    (data (data 97) (length 1) (address 13))
-    (data (data 50) (length 1) (address 14))
-    (data (data 113) (length 1) (address 15))
-    (data (data 129) (length 1) (address 16))
-    (data (data 5) (length 1) (address 17))
-    (data (data 35) (length 1) (address 18))
-    (data (data 66) (length 1) (address 19))
-    (data (data 145) (length 1) (address 20))
-    (data (data 20) (length 1) (address 21))
-    (data (data 51) (length 1) (address 22))
-    (data (data 82) (length 1) (address 23))
-    (data (data 161) (length 1) (address 24))
-    (data (data 193) (length 1) (address 25))
+    (data ((data 0) (data_address 0) (data_write 1)))
+    (data ((data 1) (data_address 1) (data_write 1)))
+    (data ((data 2) (data_address 2) (data_write 1)))
+    (data ((data 17) (data_address 3) (data_write 1)))
+    (data ((data 33) (data_address 4) (data_write 1)))
+    (data ((data 3) (data_address 5) (data_write 1)))
+    (data ((data 18) (data_address 6) (data_write 1)))
+    (data ((data 49) (data_address 7) (data_write 1)))
+    (data ((data 65) (data_address 8) (data_write 1)))
+    (data ((data 81) (data_address 9) (data_write 1)))
+    (data ((data 4) (data_address 10) (data_write 1)))
+    (data ((data 19) (data_address 11) (data_write 1)))
+    (data ((data 34) (data_address 12) (data_write 1)))
+    (data ((data 97) (data_address 13) (data_write 1)))
+    (data ((data 50) (data_address 14) (data_write 1)))
+    (data ((data 113) (data_address 15) (data_write 1)))
+    (data ((data 129) (data_address 16) (data_write 1)))
+    (data ((data 5) (data_address 17) (data_write 1)))
+    (data ((data 35) (data_address 18) (data_write 1)))
+    (data ((data 66) (data_address 19) (data_write 1)))
+    (data ((data 145) (data_address 20) (data_write 1)))
+    (data ((data 20) (data_address 21) (data_write 1)))
+    (data ((data 51) (data_address 22) (data_write 1)))
+    (data ((data 82) (data_address 23) (data_write 1)))
+    (data ((data 161) (data_address 24) (data_write 1)))
+    (data ((data 193) (data_address 25) (data_write 1)))
     ┌Signals───────────┐┌Waves─────────────────────────────────────────────────────────────────────────────────────────────────────┐
     │clock             ││┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐│
     │                  ││   └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └│

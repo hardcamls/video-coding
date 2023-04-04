@@ -388,13 +388,20 @@ module Dht = struct
     [@@deriving sexp_of, hardcaml]
   end
 
+  module Code_data = struct
+    type 'a t =
+      { data : 'a [@bits 8]
+      ; data_address : 'a [@bits 16]
+      ; data_write : 'a
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
   module Fields = struct
     type 'a t =
       { header : 'a Header.Fields.t [@rtlprefix "hdr$"]
-      ; data : 'a [@bits 8]
-      ; data_address : 'a [@bits 16]
-      ; data_write : 'a
       ; code : 'a Code.t
+      ; code_data : 'a Code_data.t
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -464,15 +471,17 @@ module Dht = struct
         mux2 (data_write.value |: code_write.value) (of_int ~width:5 8) header.read_bits
     ; fields =
         { header = header.fields
-        ; data = i.bits.:[7, 0]
-        ; data_address = address.value
-        ; data_write = data_write.value
         ; code =
             { code_length_minus1 = count4.value
             ; num_codes_at_length
             ; code = code.value
             ; code_base_address = total_codes.value
             ; code_write = code_write.value
+            }
+        ; code_data =
+            { data = i.bits.:[7, 0]
+            ; data_address = address.value
+            ; data_write = data_write.value
             }
         }
     ; done_ = done_.value

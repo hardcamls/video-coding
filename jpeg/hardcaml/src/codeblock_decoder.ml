@@ -8,6 +8,7 @@ module I = struct
     { clocking : 'a Clocking.t
     ; dht_header : 'a Markers.Dht.Header.Fields.t
     ; dht_code : 'a Markers.Dht.Code.t
+    ; dht_code_data : 'a Markers.Dht.Code_data.t
     ; start : 'a
     ; bits : 'a [@bits 16]
     }
@@ -30,6 +31,57 @@ module State = struct
   [@@deriving sexp_of, enumerate, compare]
 end
 
+let codeword_decoder ~name ~acdc ~id scope (i : _ I.t) =
+  let module T = struct
+    type t =
+      { data_ram_depth : int
+      ; data_ram_width : int
+      ; data_ram_address_bits : int
+      ; class_ : int
+      }
+  end
+  in
+  let table_spec =
+    match acdc with
+    | `dc ->
+      { T.data_ram_depth = 12; data_ram_width = 4; data_ram_address_bits = 4; class_ = 0 }
+    | `ac ->
+      { T.data_ram_depth = 16 * 12
+      ; data_ram_width = 8
+      ; data_ram_address_bits = 8
+      ; class_ = 1
+      }
+  in
+  let code_in =
+    let code = i.dht_code in
+    let wr =
+      let dest_id = i.dht_header.destination_identifier.:(0) ==:. id in
+      let class_ = i.dht_header.table_class.:(0) ==:. table_spec.class_ in
+      dest_id &: class_
+    in
+    { code with code_write = code.code_write &: wr }
+  in
+  let code =
+    Codeword_decoder.hierarchical
+      scope
+      ~name
+      { Codeword_decoder.I.clocking = i.clocking; code_in; bits = i.bits }
+  in
+  let data =
+    memory
+      table_spec.data_ram_depth
+      ~write_port:
+        { write_clock = i.clocking.clock
+        ; write_address =
+            i.dht_code_data.data_address.:+[table_spec.data_ram_address_bits, None]
+        ; write_data = i.dht_code_data.data.:+[table_spec.data_ram_width, None]
+        ; write_enable = i.dht_code_data.data_write
+        }
+      ~read_address:code.decoded.data_address.:+[table_spec.data_ram_address_bits, None]
+  in
+  data
+;;
+
 let create scope (i : _ I.t) =
   let load_code acdc id =
     let code = i.dht_code in
@@ -46,7 +98,7 @@ let create scope (i : _ I.t) =
   in
   let dc =
     Array.init 2 ~f:(fun id ->
-        Codeword_decoder.hierarchical
+        codeword_decoder
           scope
           ~name:[%string "dc%{id#Int}"]
           { Codeword_decoder.I.clocking = i.clocking

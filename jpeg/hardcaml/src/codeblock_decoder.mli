@@ -6,6 +6,7 @@ module I : sig
     { clocking : 'a Clocking.t
     ; dht_header : 'a Markers.Dht.Header.Fields.t
     ; dht_code : 'a Codeword_decoder.Code.t
+    ; dht_code_data : 'a Markers.Dht.Code_data.t
     ; start : 'a
     ; bits : 'a
     }

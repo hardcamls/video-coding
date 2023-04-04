@@ -11,7 +11,7 @@ open Hardcaml_waveterm
 *)
 
 module Decoder = struct
-  open Signal
+  open! Signal
   module Decoder = Codeblock_decoder
   module Reader = Util.Super_simple_bitstream_reader
 
@@ -19,12 +19,15 @@ module Decoder = struct
     type 'a t =
       { clocking : 'a Clocking.t
       ; start : 'a
+      ; dht_header : 'a Hardcaml_jpeg.Markers.Dht.Header.Fields.t
+      ; dht_code : 'a Hardcaml_jpeg.Markers.Dht.Code.t
+      ; dht_code_data : 'a Hardcaml_jpeg.Markers.Dht.Code_data.t
       }
     [@@deriving sexp_of, hardcaml]
   end
 
   module O = struct
-    type 'a t = { doo : 'a } [@@deriving sexp_of, hardcaml]
+    type 'a t = { decoder : 'a Decoder.O.t } [@@deriving sexp_of, hardcaml]
   end
 
   let create ~bits scope (i : _ I.t) =
@@ -33,8 +36,9 @@ module Decoder = struct
       Decoder.create
         scope
         { Decoder.I.clocking = i.clocking
-        ; dht_header = Hardcaml_jpeg.Markers.Dht.Header.Fields.Of_signal.of_int 0
-        ; dht_code = Hardcaml_jpeg.Markers.Dht.Code.Of_signal.of_int 0
+        ; dht_header = i.dht_header
+        ; dht_code = i.dht_code
+        ; dht_code_data = i.dht_code_data
         ; start = i.start
         ; bits = reader.bits
         }
@@ -45,11 +49,13 @@ module Decoder = struct
          ~bits
          scope
          { Reader.I.clocking = i.clocking; read_bits = decoder.read_bits });
-    { O.doo = gnd }
+    { O.decoder }
   ;;
 end
 
 module Sim = Cyclesim.With_interface (Decoder.I) (Decoder.O)
+
+let ( <--. ) a b = a := Bits.of_int ~width:(Bits.width !a) b
 
 let test ?(waves = false) filename =
   let headers, entropy_bits = Util.headers_and_entropy_coded_segment filename in
@@ -70,16 +76,38 @@ let test ?(waves = false) filename =
   inputs.clocking.clear := Bits.vdd;
   Cyclesim.cycle sim;
   inputs.clocking.clear := Bits.gnd;
+  (* load the code words from the header *)
+  let tables = Hardcaml_jpeg_model.Model.Header.huffman_tables headers in
+  List.iter tables ~f:(fun t ->
+      let lengths = t.lengths in
+      inputs.dht_header.destination_identifier <--. t.destination_identifier;
+      inputs.dht_header.table_class <--. t.table_class;
+      let pos = ref 0 in
+      let code = ref 0 in
+      inputs.dht_code.code_write := Bits.vdd;
+      for i = 0 to Array.length lengths - 1 do
+        inputs.dht_code.code_base_address <--. !pos;
+        inputs.dht_code.code_length_minus1 <--. i;
+        inputs.dht_code.num_codes_at_length <--. lengths.(i);
+        inputs.dht_code.code <--. !code;
+        code := (!code + lengths.(i)) lsl 1;
+        pos := !pos + lengths.(i);
+        Cyclesim.cycle sim
+      done;
+      inputs.dht_code.code_write := Bits.gnd);
   inputs.start := Bits.vdd;
   Cyclesim.cycle sim;
   inputs.start := Bits.gnd;
+  for _ = 0 to 100 do
+    Cyclesim.cycle sim
+  done;
   waves
 ;;
 
 let%expect_test "test" =
   Option.iter
     (test ~waves:true "Mouse480.jpg")
-    ~f:(Waveform.print ~display_width:100 ~display_height:40 ~wave_width:2);
+    ~f:(Waveform.print ~display_width:100 ~display_height:40 ~wave_width:(-2));
   [%expect
     {|
     ("String.length entropy_bits" 6281)
@@ -133,34 +161,34 @@ let%expect_test "test" =
          (successive_approximation_bit_high 0)
          (successive_approximation_bit_low 0))))))
     ┌Signals───────────┐┌Waves─────────────────────────────────────────────────────────────────────────┐
-    │doo               ││                                                                              │
-    │                  ││────────────                                                                  │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
+    │clock             ││╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥│
+    │                  ││╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨│
+    │clear             ││╥                                                                             │
+    │                  ││╨─────────────────────────────────────────────────────────────────────────────│
+    │                  ││─╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥──────────────────────────────────────────────│
+    │code              ││ ║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║ FC00                                         │
+    │                  ││─╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨──────────────────────────────────────────────│
+    │                  ││─╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥──────────────────────────────────────────────│
+    │code_length_minus1││ ║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║ F                                            │
+    │                  ││─╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨──────────────────────────────────────────────│
+    │code_write        ││╥───────────────────────────────╥                                             │
+    │                  ││╨                               ╨─────────────────────────────────────────────│
+    │                  ││╥───────────────╥─────────────────────────────────────────────────────────────│
+    │destination_identi││║ 1             ║ 0                                                           │
+    │                  ││╨───────────────╨─────────────────────────────────────────────────────────────│
+    │                  ││╥─┬─────╥─┬──────┬╥╥╥╥─┬─╥─╥──────────────────────────────────────────────────│
+    │num_codes_at_lengt││║ │00   ║ │00    │║║║║ │.║ ║ 00                                               │
+    │                  ││╨─┴─────╨─┴──────┴╨╨╨╨─┴─╨─╨──────────────────────────────────────────────────│
+    │start             ││                                ╥                                             │
+    │                  ││────────────────────────────────╨─────────────────────────────────────────────│
+    │                  ││╥───────╥───────╥───────╥─────────────────────────────────────────────────────│
+    │table_class       ││║ 1     ║ 0     ║ 1     ║ 0                                                   │
+    │                  ││╨───────╨───────╨───────╨─────────────────────────────────────────────────────│
+    │done_             ││─────────────────────────────────┐┌───────────────────────────────────────────│
+    │                  ││                                 └┘                                           │
+    │                  ││─────────────────────────────────┬┬───────────────────────────────────────────│
+    │read_bits         ││ 00                              ││00                                         │
+    │                  ││─────────────────────────────────┴┴───────────────────────────────────────────│
     │                  ││                                                                              │
     │                  ││                                                                              │
     │                  ││                                                                              │

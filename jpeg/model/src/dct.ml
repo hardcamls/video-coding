@@ -252,6 +252,97 @@ module Floating_point = struct
                 Float.sqrt (2. /. n) *. Float.cos (Float.pi /. n *. (col +. 0.5) *. row))))
     ;;
 
+    let static_forward_transform_matrix =
+      [| [| 0x3fd6a09e667f3bccL
+          ; 0x3fd6a09e667f3bccL
+          ; 0x3fd6a09e667f3bccL
+          ; 0x3fd6a09e667f3bccL
+          ; 0x3fd6a09e667f3bccL
+          ; 0x3fd6a09e667f3bccL
+          ; 0x3fd6a09e667f3bccL
+          ; 0x3fd6a09e667f3bccL
+         |]
+       ; [| 0x3fdf6297cff75cb0L
+          ; 0x3fda9b66290ea1a3L
+          ; 0x3fd1c73b39ae68c9L
+          ; 0x3fb8f8b83c69a60dL
+          ; -0x40470747c39659f8L
+          ; -0x402e38c4c651973aL
+          ; -0x40256499d6f15e5cL
+          ; -0x40209d683008a350L
+         |]
+       ; [| 0x3fdd906bcf328d46L
+          ; 0x3fc87de2a6aea964L
+          ; -0x4037821d5951569eL
+          ; -0x40226f9430cd72baL
+          ; -0x40226f9430cd72b9L
+          ; -0x4037821d59515693L
+          ; 0x3fc87de2a6aea967L
+          ; 0x3fdd906bcf328d44L
+         |]
+       ; [| 0x3fda9b66290ea1a3L
+          ; -0x40470747c39659f8L
+          ; -0x40209d683008a350L
+          ; -0x402e38c4c6519738L
+          ; 0x3fd1c73b39ae68c5L
+          ; 0x3fdf6297cff75cb2L
+          ; 0x3fb8f8b83c69a5feL
+          ; -0x40256499d6f15e66L
+         |]
+       ; [| 0x3fd6a09e667f3bcdL
+          ; -0x40295f619980c434L
+          ; -0x40295f619980c432L
+          ; 0x3fd6a09e667f3bcbL
+          ; 0x3fd6a09e667f3bceL
+          ; -0x40295f619980c43bL
+          ; -0x40295f619980c437L
+          ; 0x3fd6a09e667f3bc4L
+         |]
+       ; [| 0x3fd1c73b39ae68c9L
+          ; -0x40209d683008a350L
+          ; 0x3fb8f8b83c69a60cL
+          ; 0x3fda9b66290ea1a5L
+          ; -0x40256499d6f15e5eL
+          ; -0x40470747c39659bfL
+          ; 0x3fdf6297cff75cafL
+          ; -0x402e38c4c651973eL
+         |]
+       ; [| 0x3fc87de2a6aea964L
+          ; -0x40226f9430cd72b9L
+          ; 0x3fdd906bcf328d44L
+          ; -0x4037821d5951569bL
+          ; -0x4037821d5951568fL
+          ; 0x3fdd906bcf328d4cL
+          ; -0x40226f9430cd72b7L
+          ; 0x3fc87de2a6aea924L
+         |]
+       ; [| 0x3fb8f8b83c69a60dL
+          ; -0x402e38c4c6519738L
+          ; 0x3fda9b66290ea1a5L
+          ; -0x40209d683008a34eL
+          ; 0x3fdf6297cff75cb0L
+          ; -0x40256499d6f15e68L
+          ; 0x3fd1c73b39ae68dcL
+          ; -0x40470747c3965a68L
+         |]
+      |]
+      |> Array.map ~f:(Array.map ~f:Int64.float_of_bits)
+    ;;
+
+    (* Rather annoyingly, the matrices generated on x86 (linux) and arm (m2 mac) are different. 
+       This seems to come down to some difference in the C library [cos] function. 
+       
+        This is super annoying in the tests which were constantly flapping when switching dev machines, 
+        so we provide the option to use the version generated on x86 by default below.       
+       *)
+    let use_static_matrix_generated_on_x86 = true
+
+    let forward_transform_matrix =
+      if use_static_matrix_generated_on_x86
+      then static_forward_transform_matrix
+      else forward_transform_matrix
+    ;;
+
     let inverse_transform_matrix = transpose forward_transform_matrix
 
     let forward_transform a =

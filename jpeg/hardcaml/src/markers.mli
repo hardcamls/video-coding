@@ -135,13 +135,20 @@ module Dht : sig
     [@@deriving sexp_of, hardcaml]
   end
 
+  module Code_data : sig
+    type 'a t =
+      { data : 'a
+      ; data_address : 'a
+      ; data_write : 'a
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
   module Fields : sig
     type 'a t =
       { header : 'a Header.Fields.t
-      ; data : 'a
-      ; data_address : 'a
-      ; data_write : 'a
       ; code : 'a Code.t
+      ; code_data : 'a Code_data.t
       }
     [@@deriving sexp_of, hardcaml]
   end
