@@ -89,7 +89,9 @@ let mag bits cat =
   if cat = 0
   then 0
   else (
+    let showed = Bits.show bits 16 in
     let v = Bits.get bits cat in
+    Stdio.eprintf "   -> mag %4x cat=%i v=%i\n" showed cat v;
     if v land (1 lsl (cat - 1)) <> 0
     then (* +ve coeff *)
       v
@@ -102,6 +104,7 @@ let dc_code bits table =
   match (Tables.Lut.lut table).(code) with
   | None -> raise_s [%message "Can't find dc code"]
   | Some { length; data } ->
+    Stdio.eprintf "dc %4x %4x len=%i cat=%i\n" (Bits.show bits 16) code length data;
     Bits.advance bits length;
     mag bits data
 ;;
@@ -111,6 +114,7 @@ let ac_code bits (table : Tables.ac Tables.Lut.t) =
   match (Tables.Lut.lut table).(code) with
   | None -> raise_s [%message "Can't find ac code"]
   | Some { length; data = { run; size } } ->
+    Stdio.eprintf "ac %4x %4x l=%i s=%i r=%i\n" (Bits.show bits 16) code length size run;
     Bits.advance bits length;
     mag bits size, run
 ;;
@@ -292,6 +296,7 @@ let decode_component ~bits ~decoder ~(component : Component.t) ~blk_x ~blk_y =
       (* Stdio.eprint_s
         [%message
           (blk_x : int) (blk_y : int) (x : int) (y : int) (x_pos : int) (y_pos : int)]; *)
+      Stdio.eprintf "[%i %i] [%i %i] [%i %i]\n" blk_x blk_y x y x_pos y_pos;
       component.dc_pred
         <- huffman_decode
              ~bits

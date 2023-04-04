@@ -69,14 +69,14 @@ module Super_simple_bitstream_reader = struct
   end
 
   let create ~bits _scope { I.clocking; read_bits } =
-    let bits = String.to_list bits |> List.map ~f:of_char |> concat_lsb in
+    let bits = String.to_list bits |> List.map ~f:of_char |> concat_msb in
     let bits =
       reg_fb
         (Reg_spec.override (Clocking.to_spec clocking) ~clear_to:bits)
         ~width:(width bits)
-        ~f:(fun d -> log_shift srl d read_bits)
+        ~f:(fun d -> log_shift sll d read_bits)
     in
-    { O.bits = bits.:[15, 0] }
+    { O.bits = bits.:-[None, 16] }
   ;;
 
   let hierarchical ~bits scope =

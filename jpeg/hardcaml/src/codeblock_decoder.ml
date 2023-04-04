@@ -10,7 +10,17 @@ module I = struct
     ; dht_code : 'a Markers.Dht.Code.t
     ; dht_code_data : 'a Markers.Dht.Code_data.t
     ; start : 'a
+    ; table_id : 'a
     ; bits : 'a [@bits 16]
+    }
+  [@@deriving sexp_of, hardcaml]
+end
+
+module Errors = struct
+  type 'a t =
+    { dc_coef_decode : 'a
+    ; ac_coef_decode : 'a
+    ; too_many_ac_coefs : 'a
     }
   [@@deriving sexp_of, hardcaml]
 end
@@ -19,6 +29,7 @@ module O = struct
   type 'a t =
     { done_ : 'a
     ; read_bits : 'a [@bits 5]
+    ; errors : 'a Errors.t
     }
   [@@deriving sexp_of, hardcaml]
 end
@@ -27,11 +38,24 @@ module State = struct
   type t =
     | Start
     | Dc
+    | Dc_size
     | Ac
+    | Ac_size
   [@@deriving sexp_of, enumerate, compare]
 end
 
+module Decoded_code = struct
+  type 'a t =
+    { bits : 'a
+    ; data : 'a
+    ; matches : 'a
+    }
+  [@@deriving sexp_of, hardcaml]
+end
+
 let codeword_decoder ~name ~acdc ~id scope (i : _ I.t) =
+  let ( -- ) = Scope.naming scope in
+  let ( -- ) s n = s -- (name ^ "dec$" ^ n) in
   let module T = struct
     type t =
       { data_ram_depth : int
@@ -52,14 +76,14 @@ let codeword_decoder ~name ~acdc ~id scope (i : _ I.t) =
       ; class_ = 1
       }
   in
+  let write =
+    let dest_id = i.dht_header.destination_identifier.:(0) ==:. id in
+    let class_ = i.dht_header.table_class.:(0) ==:. table_spec.class_ in
+    dest_id &: class_
+  in
   let code_in =
     let code = i.dht_code in
-    let wr =
-      let dest_id = i.dht_header.destination_identifier.:(0) ==:. id in
-      let class_ = i.dht_header.table_class.:(0) ==:. table_spec.class_ in
-      dest_id &: class_
-    in
-    { code with code_write = code.code_write &: wr }
+    { code with code_write = code.code_write &: write }
   in
   let code =
     Codeword_decoder.hierarchical
@@ -73,65 +97,99 @@ let codeword_decoder ~name ~acdc ~id scope (i : _ I.t) =
       ~write_port:
         { write_clock = i.clocking.clock
         ; write_address =
-            i.dht_code_data.data_address.:+[table_spec.data_ram_address_bits, None]
-        ; write_data = i.dht_code_data.data.:+[table_spec.data_ram_width, None]
-        ; write_enable = i.dht_code_data.data_write
+            i.dht_code_data.data_address.:+[0, Some table_spec.data_ram_address_bits]
+            -- "write_address"
+        ; write_data =
+            i.dht_code_data.data.:+[0, Some table_spec.data_ram_width] -- "write_data"
+        ; write_enable = (i.dht_code_data.data_write &: write) -- "write_enable"
         }
-      ~read_address:code.decoded.data_address.:+[table_spec.data_ram_address_bits, None]
+      ~read_address:
+        (code.decoded.data_address.:+[0, Some table_spec.data_ram_address_bits]
+        -- "code_read_address")
   in
-  data
+  Decoded_code.Of_signal.apply_names
+    ~naming_op:( -- )
+    { Decoded_code.bits = code.decoded.length; data; matches = code.matches }
 ;;
 
+(* let magnitude cat value =
+  let sign = mux cat (gnd :: List.init 11 ~f:(fun i -> value.:(i))) in
+  let positive = 
+    List.init 12
+  sign
+;;V *)
+
 let create scope (i : _ I.t) =
-  let load_code acdc id =
-    let code = i.dht_code in
-    let wr =
-      let dest_id = i.dht_header.destination_identifier.:(0) ==:. id in
-      let class_ =
-        match acdc with
-        | `dc -> i.dht_header.table_class.:(0) ==:. 0
-        | `ac -> i.dht_header.table_class.:(0) ==:. 1
-      in
-      dest_id &: class_
-    in
-    { code with code_write = code.code_write &: wr }
-  in
+  let ( -- ) = Scope.naming scope in
   let dc =
-    Array.init 2 ~f:(fun id ->
-        codeword_decoder
-          scope
-          ~name:[%string "dc%{id#Int}"]
-          { Codeword_decoder.I.clocking = i.clocking
-          ; code_in = load_code `dc id
-          ; bits = i.bits
-          })
+    List.init 2 ~f:(fun id ->
+        codeword_decoder ~name:[%string "dc%{id#Int}"] ~acdc:`dc ~id scope i)
+    |> Decoded_code.Of_signal.mux i.table_id
   in
   let ac =
-    Array.init 2 ~f:(fun id ->
-        Codeword_decoder.hierarchical
-          scope
-          ~name:[%string "ac%{id#Int}"]
-          { Codeword_decoder.I.clocking = i.clocking
-          ; code_in = load_code `ac id
-          ; bits = i.bits
-          })
+    List.init 2 ~f:(fun id ->
+        codeword_decoder ~name:[%string "ac%{id#Int}"] ~acdc:`ac ~id scope i)
+    |> Decoded_code.Of_signal.mux i.table_id
   in
+  let ac_run = ac.data.:[7, 4] -- "ac_run" in
+  let ac_run_and_size_is_zero = (ac.data ==:. 0) -- "ac_run_and_size_is_zero" in
   let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
-  let count = Clocking.Var.reg i.clocking ~width:6 in
+  ignore (sm.current -- "STATE" : Signal.t);
+  let coef_count = Clocking.Var.reg i.clocking ~width:7 in
+  ignore (coef_count.value -- "coef_count" : Signal.t);
+  let coef_count_plus_run = coef_count.value +: uresize ac_run 7 +:. 1 in
+  let errors = Errors.Of_always.reg (Clocking.to_spec i.clocking) in
+  let on_error cond error_signal =
+    Always.(when_ cond [ error_signal <-- vdd; sm.set_next Start ])
+  in
+  let size = Clocking.Var.reg i.clocking ~width:4 in
   Always.(
     compile
       [ sm.switch
-          [ Start, [ when_ i.start [ sm.set_next Dc ] ]
-          ; Dc, [ count <--. 1; sm.set_next Ac ]
-          ; Ac, [ sm.set_next Start ]
+          [ ( Start
+            , [ when_
+                  i.start
+                  [ (* clear error signals *)
+                    Errors.Of_always.assign errors (Errors.Of_signal.of_int 0)
+                  ; sm.set_next Dc
+                  ]
+              ] )
+          ; ( Dc
+            , [ coef_count <--. 1
+              ; size <-- dc.data.:[3, 0]
+              ; sm.set_next Dc_size
+              ; on_error ~:(dc.matches) errors.dc_coef_decode
+              ] )
+          ; Dc_size, [ sm.set_next Ac ]
+          ; ( Ac
+            , [ coef_count <-- coef_count_plus_run
+              ; size <-- ac.data.:[3, 0]
+              ; sm.set_next Ac_size
+              ; when_
+                  ac_run_and_size_is_zero
+                  [ (* XX output the final run *) sm.set_next Start ]
+              ; on_error ~:(ac.matches) errors.ac_coef_decode
+              ] )
+          ; ( Ac_size
+            , [ sm.set_next Ac
+              ; when_ (coef_count.value ==:. 64) [ sm.set_next Start ]
+              ; on_error (coef_count.value >:. 64) errors.too_many_ac_coefs
+              ] )
           ]
       ]);
   { O.done_ = sm.is Start
   ; read_bits =
       priority_select_with_default
         ~default:(zero 5)
-        [ { valid = sm.is Dc; value = dc.(0).decoded.length }
-        ; { valid = sm.is Ac; value = ac.(0).decoded.length }
+        [ { valid = sm.is Dc; value = dc.bits }
+        ; { valid = sm.is Dc_size |: sm.is Ac_size; value = uresize size.value 5 }
+        ; { valid = sm.is Ac; value = ac.bits }
         ]
+  ; errors = Errors.Of_always.value errors
   }
+;;
+
+let hierarchical scope =
+  let module Hier = Hierarchy.In_scope (I) (O) in
+  Hier.hierarchical ~scope ~name:"cblock" create
 ;;

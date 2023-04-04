@@ -15,7 +15,7 @@ end
 module Decoded_code = struct
   type 'a t =
     { data_address : 'a [@bits 16]
-    ; length : 'a [@btis 5]
+    ; length : 'a [@bits 5]
     }
   [@@deriving sexp_of, hardcaml]
 end
@@ -33,12 +33,14 @@ let decoder ~length scope (i : _ I.t) =
   let ( -- ) s n = s -- [%string "d%{length#Int}$%{n}"] in
   (* Latch the code entry for this decoder *)
   let code =
-    Code.map
-      i.code_in
-      ~f:
-        (Clocking.reg
-           i.clocking
-           ~enable:(i.code_in.code_write &: (i.code_in.code_length_minus1 ==:. length - 1)))
+    Code.Of_signal.apply_names ~naming_op:( -- ) ~prefix:"code$"
+    @@ Code.map
+         i.code_in
+         ~f:
+           (Clocking.reg
+              i.clocking
+              ~enable:
+                (i.code_in.code_write &: (i.code_in.code_length_minus1 ==:. length - 1)))
   in
   let code_max =
     Clocking.reg
@@ -49,13 +51,17 @@ let decoder ~length scope (i : _ I.t) =
   let has_codes_at_length =
     Clocking.reg i.clocking (code.num_codes_at_length <>:. 0) -- "has_codes"
   in
-  let bits = i.bits.:[length - 1, 0] -- "bits" in
+  let bits = i.bits.:-[None, length] -- "bits" in
   let valid =
     let gte_min = bits >=: code.code.:[length - 1, 0] in
     let lte_max = bits <=: code_max in
     (gte_min &: lte_max &: has_codes_at_length) -- "valid"
   in
-  let offset = code.code_base_address +: uresize bits 16 -- "offset" in
+  (* XXX code base address doesnt need to be 16 bits for DC coefs *)
+  (* XXX we can subtract out the base address from the code before this *)
+  let offset =
+    code.code_base_address +: uresize bits 16 -: uresize code.code 16 -- "offset"
+  in
   let length = Signal.of_int ~width:5 length in
   { With_valid.valid; value = { Decoded_code.data_address = offset; length } }
 ;;
