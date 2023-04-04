@@ -1,5 +1,5 @@
 open Base
-module Bits = Bitstream_reader.Make (String)
+module Bits = Bitstream_reader.From_string
 
 module Component = struct
   type t =

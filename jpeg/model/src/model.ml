@@ -1,15 +1,15 @@
 open! Base
-module Bits = Bitstream_reader.Make (String)
+module Bits = Bitstream_reader.From_string
 
 module Header = struct
   type t =
     { frame : Markers.Sof.t option
-    ; scan : Markers.Sos.t option
     ; quant_tables : Markers.Dqt.t list
-    ; restart_interval : Markers.Dri.t option
     ; huffman_tables : Markers.Dht.t list
+    ; restart_interval : Markers.Dri.t option
+    ; scan : Markers.Sos.t option
     }
-  [@@deriving sexp_of]
+  [@@deriving sexp_of, fields]
 
   let empty =
     { frame = None
@@ -36,7 +36,7 @@ module Header = struct
   let rec decode bits t =
     find_marker bits;
     let marker_code = Bits.get bits 8 in
-    Stdio.eprint_s [%message (marker_code : Int.Hex.t)];
+    (* Stdio.eprint_s [%message (marker_code : Int.Hex.t)]; *)
     if marker_code = Marker_code.sof0
     then (
       let sof = Markers.Sof.decode bits in
@@ -289,9 +289,9 @@ let decode_component ~bits ~decoder ~(component : Component.t) ~blk_x ~blk_y =
     for x = 0 to hscale - 1 do
       let x_pos = ((blk_x * vscale) + x) * 8 in
       let y_pos = ((blk_y * hscale) + y) * 8 in
-      Stdio.eprint_s
+      (* Stdio.eprint_s
         [%message
-          (blk_x : int) (blk_y : int) (x : int) (y : int) (x_pos : int) (y_pos : int)];
+          (blk_x : int) (blk_y : int) (x : int) (y : int) (x_pos : int) (y_pos : int)]; *)
       component.dc_pred
         <- huffman_decode
              ~bits

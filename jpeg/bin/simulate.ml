@@ -12,10 +12,20 @@ let command_vld =
         Option.iter waves ~f:Hardcaml_waveterm_interactive.run]
 ;;
 
+let command_codeblock =
+  Command.basic
+    ~summary:"Codeblock simulation"
+    [%map_open.Command
+      let jpeg = anon ("JPEG" %: string) in
+      fun () ->
+        let waves = Hardcaml_jpeg_test.Test_codeblock_decoder.test ~waves:true jpeg in
+        Option.iter waves ~f:Hardcaml_waveterm_interactive.run]
+;;
+
 let command =
   Command.group
     ~summary:"JPEG core simulations"
-    [ "dct", Dct.command; "vld", command_vld ]
+    [ "dct", Dct.command; "vld", command_vld; "codeblock", command_codeblock ]
 ;;
 
 let () = Command_unix.run command

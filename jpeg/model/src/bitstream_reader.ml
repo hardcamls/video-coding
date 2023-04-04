@@ -1,11 +1,7 @@
 open Base
 
-module type Buffer = sig
-  type t [@@deriving sexp_of]
-
-  val length : t -> int
-  val get : t -> int -> char
-end
+module type Buffer = Bitstream_reader_intf.Buffer
+module type S = Bitstream_reader_intf.S
 
 module Make (Buffer : Buffer) = struct
   type t =
@@ -15,7 +11,10 @@ module Make (Buffer : Buffer) = struct
     }
   [@@deriving sexp_of]
 
+  type buffer = Buffer.t
+
   let create buffer = { buffer; length_in_bits = Buffer.length buffer * 8; bit_pos = 0 }
+  let get_buffer t = t.buffer
 
   let get_byte t byte_no =
     try Buffer.get t.buffer byte_no with
@@ -54,3 +53,5 @@ module Make (Buffer : Buffer) = struct
     if num_bits <> 0 then advance t (8 - num_bits)
   ;;
 end
+
+module From_string = Make (String)
