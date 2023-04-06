@@ -103,7 +103,7 @@ module Dqt : sig
     type 'a t =
       { fields : 'a Header.Fields.t
       ; element : 'a
-      ; element_address : 'a [@bits 6]
+      ; element_address : 'a
       ; element_write : 'a
       }
     [@@deriving sexp_of, hardcaml]

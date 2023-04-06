@@ -21,9 +21,13 @@ module Header : sig
   val huffman_tables : t -> Markers.Dht.t list
 end
 
-(** Given a bitstream that has decoded the headers up to start of scan, 
-    extract the entropy coded bits while removing 'stuffed' bytes. *)
-val extract_entropy_coded_bits : Bits.t -> Bits.t
-
 (** Decode a frame and it's headers. *)
 val decode_frame : Bits.t -> Plane.t array
+
+module For_testing : sig
+  val mag : int -> int -> int
+
+  (** Given a bitstream that has decoded the headers up to start of scan, 
+    extract the entropy coded bits while removing 'stuffed' bytes. *)
+  val extract_entropy_coded_bits : Bits.t -> Bits.t
+end

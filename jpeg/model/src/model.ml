@@ -85,6 +85,14 @@ let create_code_table lengths (values : int array array) =
   build 0 0 |> List.concat
 ;;
 
+let mag' cat code =
+  if code land (1 lsl (cat - 1)) <> 0
+  then (* +codee coeff *)
+    code
+  else (* -codee coeff *)
+    (code lor (-1 lsl cat)) + 1
+;;
+
 let mag bits cat =
   if cat = 0
   then 0
@@ -92,11 +100,7 @@ let mag bits cat =
     let showed = Bits.show bits 16 in
     let v = Bits.get bits cat in
     Stdio.eprintf "   -> mag %4x cat=%i v=%i\n" showed cat v;
-    if v land (1 lsl (cat - 1)) <> 0
-    then (* +ve coeff *)
-      v
-    else (* -ve coeff *)
-      (v lor (-1 lsl cat)) + 1)
+    mag' cat v)
 ;;
 
 let dc_code bits table =
@@ -305,6 +309,12 @@ let decode_component ~bits ~decoder ~(component : Component.t) ~blk_x ~blk_y =
              ~dc_tab:component.dc_tab
              ~ac_tab:component.ac_tab
              ~qnt_tab:component.quant_table;
+      for i = 0 to 7 do
+        for j = 0 to 7 do
+          Stdio.eprintf "%i " decoder.block.((i * 8) + j)
+        done;
+        Stdio.eprintf "\n"
+      done;
       Dct.Chen.inverse_8x8 decoder.block;
       (* Stdio.print_s [%message (decoder.block : block)]; *)
       (* let () = assert false in *)
@@ -377,3 +387,8 @@ let decode_frame (bits : Bits.t) =
   done;
   Array.map decoder.components ~f:(fun c -> c.plane)
 ;;
+
+module For_testing = struct
+  let mag = mag'
+  let extract_entropy_coded_bits = extract_entropy_coded_bits
+end

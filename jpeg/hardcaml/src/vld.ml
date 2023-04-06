@@ -47,12 +47,10 @@ module Core = struct
 
   module O = struct
     type 'a t =
-      { coef : 'a [@bits 12]
-      ; run : 'a [@bits 4]
-      ; write : 'a
-      ; read_bits : 'a [@bits 5] (* 0..16 *)
+      { read_bits : 'a [@bits 5] (* 0..16 *)
       ; markers : 'a All_markers.t
       ; error : 'a Error.t [@rtlprefix "error_"]
+      ; done_ : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -126,7 +124,7 @@ module Core = struct
                     ]
                 ] )
             ; Sof, [ when_ sof.done_ [ sm.set_next Scan_markers ] ]
-            ; Sos, [ when_ sos.done_ [ sm.set_next Scan_markers ] ]
+            ; Sos, [ when_ sos.done_ [ sm.set_next Start ] ]
             ; Dqt, [ when_ dqt.done_ [ sm.set_next Scan_markers ] ]
             ; Dht, [ when_ dht.done_ [ sm.set_next Scan_markers ] ]
             ; Dri, []
@@ -162,12 +160,10 @@ module Core = struct
         ]
         ~default:read_bits.value
     in
-    { O.coef = zero 12
-    ; run = zero 4
-    ; write = gnd
-    ; read_bits
+    { O.read_bits
     ; markers = { dht = dht.fields; dqt = dqt.fields; sof = sof.fields; sos = sos.fields }
     ; error = Error.Of_always.value error
+    ; done_ = sm.is Start
     }
   ;;
 
@@ -190,12 +186,10 @@ module With_reader = struct
 
   module O = struct
     type 'a t =
-      { coef : 'a [@bits 12]
-      ; run : 'a [@bits 4]
-      ; write : 'a
-      ; markers : 'a Core.All_markers.t
+      { markers : 'a Core.All_markers.t
       ; error : 'a Core.Error.t [@rtlprefix "error_"]
       ; read_bits_in : 'a
+      ; done_ : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -223,12 +217,10 @@ module With_reader = struct
            ; bits = reader.bits
            ; bits_valid = reader.bits_out_available
            }));
-    { O.coef = vld.coef
-    ; run = vld.run
-    ; write = vld.write
-    ; markers = vld.markers
+    { O.markers = vld.markers
     ; error = vld.error
     ; read_bits_in = reader.read_bits_in
+    ; done_ = vld.done_
     }
   ;;
 

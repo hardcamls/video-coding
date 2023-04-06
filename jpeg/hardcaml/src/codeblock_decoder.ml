@@ -25,10 +25,20 @@ module Errors = struct
   [@@deriving sexp_of, hardcaml]
 end
 
+module Idct_coefs = struct
+  type 'a t =
+    { coef : 'a [@bits 12]
+    ; address : 'a [@bits 6]
+    ; write : 'a
+    }
+  [@@deriving sexp_of, hardcaml]
+end
+
 module O = struct
   type 'a t =
     { done_ : 'a
     ; read_bits : 'a [@bits 5]
+    ; idct_coefs : 'a Idct_coefs.t
     ; errors : 'a Errors.t
     }
   [@@deriving sexp_of, hardcaml]
@@ -52,6 +62,23 @@ module Decoded_code = struct
     }
   [@@deriving sexp_of, hardcaml]
 end
+
+module Decode_magnitude (Bits : Comb.S) = struct
+  open Bits
+
+  let decode_magnitude cat code =
+    let sign = msb code in
+    let code =
+      List.init 12 ~f:(fun cat ->
+          if cat = 0 then zero 12 else uresize code.:-[None, cat] 12)
+      |> mux cat
+    in
+    let sign_bits = List.init 12 ~f:(fun i -> of_int ~width:12 (-1 lsl i)) |> mux cat in
+    mux2 sign (code &: ~:sign_bits) ((code |: sign_bits) +:. 1)
+  ;;
+end
+
+include Decode_magnitude (Signal)
 
 let codeword_decoder ~name ~acdc ~id scope (i : _ I.t) =
   let ( -- ) = Scope.naming scope in
@@ -112,13 +139,6 @@ let codeword_decoder ~name ~acdc ~id scope (i : _ I.t) =
     { Decoded_code.bits = code.decoded.length; data; matches = code.matches }
 ;;
 
-(* let magnitude cat value =
-  let sign = mux cat (gnd :: List.init 11 ~f:(fun i -> value.:(i))) in
-  let positive = 
-    List.init 12
-  sign
-;;V *)
-
 let create scope (i : _ I.t) =
   let ( -- ) = Scope.naming scope in
   let dc =
@@ -133,21 +153,24 @@ let create scope (i : _ I.t) =
   in
   let ac_run = ac.data.:[7, 4] -- "ac_run" in
   let ac_run_and_size_is_zero = (ac.data ==:. 0) -- "ac_run_and_size_is_zero" in
+  let run = Clocking.Var.reg i.clocking ~width:7 in
+  let size = Clocking.Var.reg i.clocking ~width:4 in
+  let run_is_zero = run.value ==:. 0 in
   let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
   ignore (sm.current -- "STATE" : Signal.t);
   let coef_count = Clocking.Var.reg i.clocking ~width:7 in
+  let coef_count_next = coef_count.value +:. 1 in
   ignore (coef_count.value -- "coef_count" : Signal.t);
-  let coef_count_plus_run = coef_count.value +: uresize ac_run 7 +:. 1 in
   let errors = Errors.Of_always.reg (Clocking.to_spec i.clocking) in
   let on_error cond error_signal =
     Always.(when_ cond [ error_signal <-- vdd; sm.set_next Start ])
   in
-  let size = Clocking.Var.reg i.clocking ~width:4 in
   Always.(
     compile
       [ sm.switch
           [ ( Start
-            , [ when_
+            , [ coef_count <--. 0
+              ; when_
                   i.start
                   [ (* clear error signals *)
                     Errors.Of_always.assign errors (Errors.Of_signal.of_int 0)
@@ -155,36 +178,48 @@ let create scope (i : _ I.t) =
                   ]
               ] )
           ; ( Dc
-            , [ coef_count <--. 1
-              ; size <-- dc.data.:[3, 0]
+            , [ size <-- dc.data.:[3, 0]
               ; sm.set_next Dc_size
               ; on_error ~:(dc.matches) errors.dc_coef_decode
               ] )
-          ; Dc_size, [ sm.set_next Ac ]
+          ; Dc_size, [ coef_count <-- coef_count_next; sm.set_next Ac ]
           ; ( Ac
-            , [ coef_count <-- coef_count_plus_run
+            , [ run <-- uresize ac_run 7
               ; size <-- ac.data.:[3, 0]
               ; sm.set_next Ac_size
               ; when_
                   ac_run_and_size_is_zero
-                  [ (* XX output the final run *) sm.set_next Start ]
+                  [ run <-- of_int ~width:7 63 -: coef_count.value; sm.set_next Ac_size ]
               ; on_error ~:(ac.matches) errors.ac_coef_decode
               ] )
           ; ( Ac_size
-            , [ sm.set_next Ac
-              ; when_ (coef_count.value ==:. 64) [ sm.set_next Start ]
-              ; on_error (coef_count.value >:. 64) errors.too_many_ac_coefs
+            , [ run <-- run.value -:. 1
+              ; coef_count <-- coef_count_next
+              ; when_
+                  run_is_zero
+                  [ sm.set_next Ac
+                  ; when_ (coef_count.value ==:. 63) [ sm.set_next Start ]
+                  ; on_error (coef_count.value >=:. 64) errors.too_many_ac_coefs
+                  ]
               ] )
           ]
       ]);
+  let magnitude = decode_magnitude size.value i.bits in
   { O.done_ = sm.is Start
   ; read_bits =
       priority_select_with_default
         ~default:(zero 5)
         [ { valid = sm.is Dc; value = dc.bits }
-        ; { valid = sm.is Dc_size |: sm.is Ac_size; value = uresize size.value 5 }
+        ; { valid = sm.is Dc_size |: (sm.is Ac_size &: run_is_zero)
+          ; value = uresize size.value 5
+          }
         ; { valid = sm.is Ac; value = ac.bits }
         ]
+  ; idct_coefs =
+      { Idct_coefs.coef = mux2 (sm.is Ac_size &: ~:run_is_zero) (zero 12) magnitude
+      ; address = coef_count.value.:[5, 0]
+      ; write = sm.is Dc_size |: sm.is Ac_size
+      }
   ; errors = Errors.Of_always.value errors
   }
 ;;
@@ -193,3 +228,7 @@ let hierarchical scope =
   let module Hier = Hierarchy.In_scope (I) (O) in
   Hier.hierarchical ~scope ~name:"cblock" create
 ;;
+
+module For_testing = struct
+  include Decode_magnitude (Bits)
+end

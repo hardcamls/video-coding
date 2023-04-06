@@ -58,6 +58,7 @@ module Make (Config : Config) = struct
       ; transpose_read : 'a
       ; read_address : 'a [@bits 6]
       ; write_address : 'a [@bits 6]
+      ; done_ : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -185,6 +186,7 @@ module Make (Config : Config) = struct
     ; transpose_read = read &: pass.value
     ; read_address
     ; write_address
+    ; done_ = sm.is Start
     }
   ;;
 

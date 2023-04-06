@@ -37,12 +37,10 @@ module Core : sig
 
   module O : sig
     type 'a t =
-      { coef : 'a
-      ; run : 'a
-      ; write : 'a
-      ; read_bits : 'a
+      { read_bits : 'a
       ; markers : 'a All_markers.t
       ; error : 'a Error.t
+      ; done_ : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -64,12 +62,10 @@ module With_reader : sig
 
   module O : sig
     type 'a t =
-      { coef : 'a
-      ; run : 'a
-      ; write : 'a
-      ; markers : 'a Core.All_markers.t
+      { markers : 'a Core.All_markers.t
       ; error : 'a Core.Error.t
       ; read_bits_in : 'a
+      ; done_ : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end

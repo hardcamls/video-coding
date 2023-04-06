@@ -37,6 +37,7 @@ module Make (Config : Config) : sig
       ; transpose_read : 'a
       ; read_address : 'a
       ; write_address : 'a
+      ; done_ : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end

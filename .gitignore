@@ -1,2 +1,5 @@
 *.exe
 _build
+tmp.log 
+*.yuv
+*.swp

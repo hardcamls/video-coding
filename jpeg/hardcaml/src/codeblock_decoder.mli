@@ -23,10 +23,20 @@ module Errors : sig
   [@@deriving sexp_of, hardcaml]
 end
 
+module Idct_coefs : sig
+  type 'a t =
+    { coef : 'a
+    ; address : 'a
+    ; write : 'a
+    }
+  [@@deriving sexp_of, hardcaml]
+end
+
 module O : sig
   type 'a t =
     { done_ : 'a
     ; read_bits : 'a
+    ; idct_coefs : 'a Idct_coefs.t
     ; errors : 'a Errors.t
     }
   [@@deriving sexp_of, hardcaml]
@@ -34,3 +44,7 @@ end
 
 val create : Scope.t -> Interface.Create_fn(I)(O).t
 val hierarchical : Scope.t -> Interface.Create_fn(I)(O).t
+
+module For_testing : sig
+  val decode_magnitude : Bits.t -> Bits.t -> Bits.t
+end
