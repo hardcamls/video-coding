@@ -60,3 +60,15 @@ module Wrapped_marker_decoder (Fields : Interface.S) (D : Fields_decoder.M(Field
     -> String.t
     -> Hardcaml_waveterm.Waveform.t option
 end
+
+val load_huffman_tables
+  :  cycle:(unit -> unit)
+  -> Bits.t ref Hardcaml_jpeg.Markers.Dht.Fields.t
+  -> Hardcaml_jpeg_model.Markers.Dht.t list
+  -> unit
+
+val load_quant_tables
+  :  cycle:(unit -> unit)
+  -> Bits.t ref Hardcaml_jpeg.Markers.Dqt.Fields.t
+  -> Hardcaml_jpeg_model.Markers.Dqt.t list
+  -> unit

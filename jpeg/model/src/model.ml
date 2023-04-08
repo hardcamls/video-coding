@@ -318,7 +318,13 @@ let decode_component ~bits ~decoder ~(component : Component.t) ~blk_x ~blk_y =
       Dct.Chen.inverse_8x8 decoder.block;
       (* Stdio.print_s [%message (decoder.block : block)]; *)
       (* let () = assert false in *)
-      recon ~block:decoder.block ~plane:component.plane x_pos y_pos
+      recon ~block:decoder.block ~plane:component.plane x_pos y_pos;
+      for j = 0 to 7 do
+        for i = 0 to 7 do
+          Stdio.eprintf "%i " Plane.(Char.to_int component.plane.![x_pos + i, y_pos + j])
+        done;
+        Stdio.eprintf "\n"
+      done
     done
   done
 ;;

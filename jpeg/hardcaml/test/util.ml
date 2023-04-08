@@ -156,3 +156,53 @@ struct
     waves
   ;;
 end
+
+let ( <--. ) a b = a := Bits.of_int ~width:(Bits.width !a) b
+
+let load_huffman_tables
+    ~cycle
+    (dht : Bits.t ref Hardcaml_jpeg.Markers.Dht.Fields.t)
+    (huffman_tables : Hardcaml_jpeg_model.Markers.Dht.t list)
+  =
+  List.iter huffman_tables ~f:(fun t ->
+      let lengths = t.lengths in
+      dht.header.destination_identifier <--. t.destination_identifier;
+      dht.header.table_class <--. t.table_class;
+      let pos = ref 0 in
+      let code = ref 0 in
+      dht.code.code_write := Bits.vdd;
+      for i = 0 to Array.length lengths - 1 do
+        dht.code.code_base_address <--. !pos;
+        dht.code.code_length_minus1 <--. i;
+        dht.code.num_codes_at_length <--. lengths.(i);
+        dht.code.code <--. !code;
+        code := (!code + lengths.(i)) lsl 1;
+        pos := !pos + lengths.(i);
+        cycle ()
+      done;
+      dht.code.code_write := Bits.gnd;
+      dht.code_data.data_write := Bits.vdd;
+      let values = Array.concat (Array.to_list t.values) in
+      for i = 0 to Array.length values - 1 do
+        dht.code_data.data_address <--. i;
+        dht.code_data.data <--. values.(i);
+        cycle ()
+      done;
+      dht.code_data.data_write := Bits.gnd)
+;;
+
+let load_quant_tables
+    ~cycle
+    (dqt : Bits.t ref Hardcaml_jpeg.Markers.Dqt.Fields.t)
+    (quant_tables : Hardcaml_jpeg_model.Markers.Dqt.t list)
+  =
+  List.iter quant_tables ~f:(fun t ->
+      dqt.fields.table_identifier <--. t.table_identifier;
+      dqt.element_write := Bits.vdd;
+      for i = 0 to Array.length t.elements - 1 do
+        dqt.element_address <--. i;
+        dqt.element <--. t.elements.(i);
+        cycle ()
+      done;
+      dqt.element_write := Bits.gnd)
+;;

@@ -4,12 +4,11 @@ open Hardcaml
 module I : sig
   type 'a t =
     { clocking : 'a Clocking.t
-    ; dht_header : 'a Markers.Dht.Header.Fields.t
-    ; dht_code : 'a Codeword_decoder.Code.t
-    ; dht_code_data : 'a Markers.Dht.Code_data.t
+    ; dht : 'a Markers.Dht.Fields.t
     ; start : 'a
     ; table_id : 'a
     ; bits : 'a
+    ; dc_pred : 'a
     }
   [@@deriving sexp_of, hardcaml]
 end
@@ -38,6 +37,7 @@ module O : sig
     ; read_bits : 'a
     ; idct_coefs : 'a Idct_coefs.t
     ; errors : 'a Errors.t
+    ; write_dc_pred : 'a
     }
   [@@deriving sexp_of, hardcaml]
 end

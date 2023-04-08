@@ -6,12 +6,11 @@ open Signal
 module I = struct
   type 'a t =
     { clocking : 'a Clocking.t
-    ; dht_header : 'a Markers.Dht.Header.Fields.t
-    ; dht_code : 'a Markers.Dht.Code.t
-    ; dht_code_data : 'a Markers.Dht.Code_data.t
+    ; dht : 'a Markers.Dht.Fields.t
     ; start : 'a
     ; table_id : 'a
     ; bits : 'a [@bits 16]
+    ; dc_pred : 'a [@bits 12]
     }
   [@@deriving sexp_of, hardcaml]
 end
@@ -40,6 +39,7 @@ module O = struct
     ; read_bits : 'a [@bits 5]
     ; idct_coefs : 'a Idct_coefs.t
     ; errors : 'a Errors.t
+    ; write_dc_pred : 'a
     }
   [@@deriving sexp_of, hardcaml]
 end
@@ -104,12 +104,12 @@ let codeword_decoder ~name ~acdc ~id scope (i : _ I.t) =
       }
   in
   let write =
-    let dest_id = i.dht_header.destination_identifier.:(0) ==:. id in
-    let class_ = i.dht_header.table_class.:(0) ==:. table_spec.class_ in
+    let dest_id = i.dht.header.destination_identifier.:(0) ==:. id in
+    let class_ = i.dht.header.table_class.:(0) ==:. table_spec.class_ in
     dest_id &: class_
   in
   let code_in =
-    let code = i.dht_code in
+    let code = i.dht.code in
     { code with code_write = code.code_write &: write }
   in
   let code =
@@ -124,11 +124,11 @@ let codeword_decoder ~name ~acdc ~id scope (i : _ I.t) =
       ~write_port:
         { write_clock = i.clocking.clock
         ; write_address =
-            i.dht_code_data.data_address.:+[0, Some table_spec.data_ram_address_bits]
+            i.dht.code_data.data_address.:+[0, Some table_spec.data_ram_address_bits]
             -- "write_address"
         ; write_data =
-            i.dht_code_data.data.:+[0, Some table_spec.data_ram_width] -- "write_data"
-        ; write_enable = (i.dht_code_data.data_write &: write) -- "write_enable"
+            i.dht.code_data.data.:+[0, Some table_spec.data_ram_width] -- "write_data"
+        ; write_enable = (i.dht.code_data.data_write &: write) -- "write_enable"
         }
       ~read_address:
         (code.decoded.data_address.:+[0, Some table_spec.data_ram_address_bits]
@@ -204,7 +204,12 @@ let create scope (i : _ I.t) =
               ] )
           ]
       ]);
-  let magnitude = decode_magnitude size.value i.bits in
+  let write_dc_pred = sm.is Dc_size in
+  let write_idct_coef = write_dc_pred |: sm.is Ac_size in
+  let magnitude =
+    let mag = decode_magnitude size.value i.bits in
+    mux2 write_dc_pred (mag +: i.dc_pred) mag
+  in
   { O.done_ = sm.is Start
   ; read_bits =
       priority_select_with_default
@@ -218,9 +223,10 @@ let create scope (i : _ I.t) =
   ; idct_coefs =
       { Idct_coefs.coef = mux2 (sm.is Ac_size &: ~:run_is_zero) (zero 12) magnitude
       ; address = coef_count.value.:[5, 0]
-      ; write = sm.is Dc_size |: sm.is Ac_size
+      ; write = write_idct_coef
       }
   ; errors = Errors.Of_always.value errors
+  ; write_dc_pred
   }
 ;;
 

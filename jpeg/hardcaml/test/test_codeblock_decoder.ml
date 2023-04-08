@@ -19,9 +19,7 @@ module Decoder = struct
     type 'a t =
       { clocking : 'a Clocking.t
       ; start : 'a
-      ; dht_header : 'a Hardcaml_jpeg.Markers.Dht.Header.Fields.t
-      ; dht_code : 'a Hardcaml_jpeg.Markers.Dht.Code.t
-      ; dht_code_data : 'a Hardcaml_jpeg.Markers.Dht.Code_data.t
+      ; dht : 'a Hardcaml_jpeg.Markers.Dht.Fields.t
       ; dqt : 'a Hardcaml_jpeg.Markers.Dqt.Fields.t
       ; table_id : 'a
       }
@@ -39,12 +37,11 @@ module Decoder = struct
       Decoder.hierarchical
         scope
         { Decoder.I.clocking = i.clocking
-        ; dht_header = i.dht_header
-        ; dht_code = i.dht_code
-        ; dht_code_data = i.dht_code_data
+        ; dht = i.dht
         ; start = i.start
         ; table_id = i.table_id
         ; bits = reader.bits
+        ; dc_pred = zero 12
         }
     in
     let dequant =
@@ -67,8 +64,6 @@ module Decoder = struct
 end
 
 module Sim = Cyclesim.With_interface (Decoder.I) (Decoder.O)
-
-let ( <--. ) a b = a := Bits.of_int ~width:(Bits.width !a) b
 
 let test ?(waves = false) filename =
   let headers, entropy_bits = Util.headers_and_entropy_coded_segment filename in
@@ -95,41 +90,9 @@ let test ?(waves = false) filename =
   inputs.clocking.clear := Bits.gnd;
   (* load the code words from the header *)
   let huffman_tables = Hardcaml_jpeg_model.Model.Header.huffman_tables headers in
-  List.iter huffman_tables ~f:(fun t ->
-      let lengths = t.lengths in
-      inputs.dht_header.destination_identifier <--. t.destination_identifier;
-      inputs.dht_header.table_class <--. t.table_class;
-      let pos = ref 0 in
-      let code = ref 0 in
-      inputs.dht_code.code_write := Bits.vdd;
-      for i = 0 to Array.length lengths - 1 do
-        inputs.dht_code.code_base_address <--. !pos;
-        inputs.dht_code.code_length_minus1 <--. i;
-        inputs.dht_code.num_codes_at_length <--. lengths.(i);
-        inputs.dht_code.code <--. !code;
-        code := (!code + lengths.(i)) lsl 1;
-        pos := !pos + lengths.(i);
-        Cyclesim.cycle sim
-      done;
-      inputs.dht_code.code_write := Bits.gnd;
-      inputs.dht_code_data.data_write := Bits.vdd;
-      let values = Array.concat (Array.to_list t.values) in
-      for i = 0 to Array.length values - 1 do
-        inputs.dht_code_data.data_address <--. i;
-        inputs.dht_code_data.data <--. values.(i);
-        Cyclesim.cycle sim
-      done;
-      inputs.dht_code_data.data_write := Bits.gnd);
+  Util.load_huffman_tables ~cycle:(fun () -> Cyclesim.cycle sim) inputs.dht huffman_tables;
   let quant_tables = Hardcaml_jpeg_model.Model.Header.quant_tables headers in
-  List.iter quant_tables ~f:(fun t ->
-      inputs.dqt.fields.table_identifier <--. t.table_identifier;
-      inputs.dqt.element_write := Bits.vdd;
-      for i = 0 to Array.length t.elements - 1 do
-        inputs.dqt.element_address <--. i;
-        inputs.dqt.element <--. t.elements.(i);
-        Cyclesim.cycle sim
-      done;
-      inputs.dqt.element_write := Bits.gnd);
+  Util.load_quant_tables ~cycle:(fun () -> Cyclesim.cycle sim) inputs.dqt quant_tables;
   inputs.start := Bits.vdd;
   Cyclesim.cycle sim;
   inputs.start := Bits.gnd;
@@ -210,32 +173,32 @@ let%expect_test "test" =
     │clocking$clock    ││                                                                              │
     │                  ││──────────────────────────────────────────────────────────────────────────────│
     │                  ││──────────────────────────────────────────────────────────────────────────────│
-    │dht_code$code     ││ FC00                                                                         │
+    │dht$code          ││ FC00                                                                         │
     │                  ││──────────────────────────────────────────────────────────────────────────────│
     │                  ││──────────────────────────────────────────────────────────────────────────────│
-    │dht_code$code_base││ 0007                                                                         │
+    │dht$code_base_addr││ 0007                                                                         │
     │                  ││──────────────────────────────────────────────────────────────────────────────│
     │                  ││──────────────────────────────────────────────────────────────────────────────│
-    │dht_code$code_leng││ F                                                                            │
+    │dht$code_length_mi││ F                                                                            │
     │                  ││──────────────────────────────────────────────────────────────────────────────│
-    │dht_code$code_writ││                                                                              │
-    │                  ││──────────────────────────────────────────────────────────────────────────────│
-    │                  ││──────────────────────────────────────────────────────────────────────────────│
-    │dht_code$num_codes││ 00                                                                           │
+    │dht$code_write    ││                                                                              │
     │                  ││──────────────────────────────────────────────────────────────────────────────│
     │                  ││────┬───┬───┬─────────────────────────────────────────────────────────────────│
-    │dht_code_data$data││ 03 │04 │05 │06                                                               │
+    │dht$data          ││ 03 │04 │05 │06                                                               │
     │                  ││────┴───┴───┴─────────────────────────────────────────────────────────────────│
     │                  ││────┬───┬───┬─────────────────────────────────────────────────────────────────│
-    │dht_code_data$data││ 00.│00.│00.│0006                                                             │
+    │dht$data_address  ││ 00.│00.│00.│0006                                                             │
     │                  ││────┴───┴───┴─────────────────────────────────────────────────────────────────│
-    │dht_code_data$data││────────────────┐                                                             │
+    │dht$data_write    ││────────────────┐                                                             │
     │                  ││                └─────────────────────────────────────────────────────────────│
     │                  ││──────────────────────────────────────────────────────────────────────────────│
-    │dht_header$destina││ 0                                                                            │
+    │dht$hdr$destinatio││ 0                                                                            │
     │                  ││──────────────────────────────────────────────────────────────────────────────│
     │                  ││──────────────────────────────────────────────────────────────────────────────│
-    │dht_header$table_c││ 0                                                                            │
+    │dht$hdr$table_clas││ 0                                                                            │
+    │                  ││──────────────────────────────────────────────────────────────────────────────│
+    │                  ││──────────────────────────────────────────────────────────────────────────────│
+    │dht$num_codes_at_l││ 00                                                                           │
     │                  ││──────────────────────────────────────────────────────────────────────────────│
     │                  ││────────────────┬───┬───────┬───┬───┬───┬───┬───────┬───┬───┬───┬───┬───┬─────│
     │dqt$element       ││ 0000           │00.│002D   │00.│00.│00.│00.│0041   │00.│00.│00.│00.│00.│00F8 │
