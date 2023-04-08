@@ -170,7 +170,7 @@ let%expect_test "test decoder" =
     ~f:(Waveform.print ~display_height:50 ~display_width:120 ~wave_width:2 ~start_cycle:0);
   [%expect
     {|
-    ((width 480) (height 320) (total_blocks 2400))
+    ((width 480) (height 320) (total_blocks 3600))
     ((macroblock 0) (subblock 0) (width 480) (x_pos 0) (y_pos 0))
     ((block_number 0)
      (pixels

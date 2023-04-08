@@ -1,3 +1,5 @@
+open Base
+
 module Chroma_subsampling = struct
   type t =
     | C420
@@ -35,6 +37,27 @@ let create ~chroma_subsampling ~width ~height =
   ; v = Plane.create ~width:cwidth ~height:cheight
   ; chroma_subsampling
   }
+;;
+
+let infer_chroma_subsampling y u v : Chroma_subsampling.t =
+  if Plane.width u <> Plane.width v || Plane.height u <> Plane.height v
+  then raise_s [%message "Chroma planes must be same width and height"];
+  let check subsampling_factor =
+    Chroma_subsampling.width subsampling_factor (Plane.width y) = Plane.width u
+    && Chroma_subsampling.height subsampling_factor (Plane.height y) = Plane.height u
+  in
+  if check C420
+  then C420
+  else if check C422
+  then C422
+  else if check C444
+  then C444
+  else raise_s [%message "Could not infer chroma subsampling"]
+;;
+
+let of_planes ~y ~u ~v =
+  let chroma_subsampling = infer_chroma_subsampling y u v in
+  { y; u; v; chroma_subsampling }
 ;;
 
 let width t = Plane.width (y t)

@@ -45,7 +45,7 @@ open Hardcaml_jpeg_model
 let headers_and_entropy_coded_segment filename =
   let bits = In_channel.with_file ~binary:true filename ~f:In_channel.input_all in
   let reader = Bitstream_reader.From_string.create bits in
-  let header = Model.Header.decode reader Model.Header.empty in
+  let header = Model.Header.decode reader in
   let entropy_bits = Model.For_testing.extract_entropy_coded_bits reader in
   header, Bitstream_reader.From_string.get_buffer entropy_bits
 ;;

@@ -6,11 +6,9 @@ module Bits = Bitstream_reader.From_string
 module Header : sig
   type t [@@deriving sexp_of]
 
-  val empty : t
-
   (** Decode the header up to a start of scan marker.  After that 
       comes the entropy coded segment. *)
-  val decode : Bits.t -> t -> t
+  val decode : Bits.t -> t
 
   (** {2 Markers decoded from the JPEG header} *)
 
@@ -21,8 +19,22 @@ module Header : sig
   val huffman_tables : t -> Markers.Dht.t list
 end
 
-(** Decode a frame and it's headers. *)
-val decode_frame : Bits.t -> Plane.t array
+module Component : sig
+  type t [@@deriving sexp_of]
+
+  module Summary : sig
+    type nonrec t = t [@@deriving sexp_of]
+  end
+end
+
+type t
+
+val init : Header.t -> t
+val decode : t -> Bits.t -> unit
+val get_frame : t -> Frame.t
+
+(** Decode frame data.  Bits should aligned to the entropy coded segment. *)
+val decode_a_frame : Bits.t -> Frame.t
 
 module For_testing : sig
   val mag : int -> int -> int
@@ -30,4 +42,19 @@ module For_testing : sig
   (** Given a bitstream that has decoded the headers up to start of scan, 
     extract the entropy coded bits while removing 'stuffed' bytes. *)
   val extract_entropy_coded_bits : Bits.t -> Bits.t
+
+  module Sequenced : sig
+    (* Take care!  Lots of stuff happens under the hood when you access this sequence!
+
+       The sequence is memoized to help avoid repeated evaluations, but must be queried 
+       sequentially regardless.
+
+       Each time you take the head of this sequence, you will decode a block and
+       can go and query the internals on the codec.  This is useful in the hardware 
+       testbenches where we want to do detailed checking.
+
+       The component just decoded is returned.
+    *)
+    val decode : t -> Bits.t -> Component.t Sequence.t
+  end
 end

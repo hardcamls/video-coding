@@ -8,6 +8,7 @@ end
 type t
 
 val create : chroma_subsampling:Chroma_subsampling.t -> width:int -> height:int -> t
+val of_planes : y:Plane.t -> u:Plane.t -> v:Plane.t -> t
 val width : t -> int
 val height : t -> int
 val y : t -> Plane.t
