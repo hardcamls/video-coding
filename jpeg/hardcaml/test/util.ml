@@ -42,6 +42,10 @@ let find_nth_marker_exn ~n ~marker_code bits =
 
 open Hardcaml_jpeg_model
 
+let load_jpeg_file filename =
+  In_channel.read_all filename |> Bitstream_reader.From_string.create
+;;
+
 let headers_and_entropy_coded_segment filename =
   let bits = In_channel.with_file ~binary:true filename ~f:In_channel.input_all in
   let reader = Bitstream_reader.From_string.create bits in

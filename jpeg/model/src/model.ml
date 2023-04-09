@@ -180,17 +180,6 @@ let decode_coefficient_block
   dequantize_dc_pred_and_inverse_zigzag ~qnt_tab ~dc_pred ~coefs ~dequant
 ;;
 
-let clip x = if x < -128 then -128 else if x > 127 then 127 else x
-let level_shift x = Char.of_int_exn (clip x + 128)
-
-let recon ~block ~plane x y =
-  for j = 0 to 7 do
-    for i = 0 to 7 do
-      Plane.(plane.![x + i, y + j] <- level_shift block.(i + (j * 8)))
-    done
-  done
-;;
-
 module Component = struct
   type t =
     { plane : (Plane.t[@sexp.opaque])
@@ -207,8 +196,9 @@ module Component = struct
     ; coefs : int array
     ; dequant : int array
     ; idct : int array
+    ; recon : int array
     }
-  [@@deriving sexp_of]
+  [@@deriving sexp_of, fields]
 
   module Summary = struct
     type nonrec t = t
@@ -230,22 +220,46 @@ module Component = struct
       [%sexp_of: hex array array] block
     ;;
 
-    let sexp_of_t { x; y; dc_pred; component; coefs; dequant; idct; _ } =
-      let sexp_of_coef = sexp_of_block 3 in
-      let sexp_of_pel = sexp_of_block 2 in
+    type coef_block = int array
+
+    let sexp_of_coef_block = sexp_of_block 3
+
+    type pixel_block = int array
+
+    let sexp_of_pixel_block = sexp_of_block 2
+
+    let sexp_of_t { x; y; dc_pred; component; coefs; dequant; idct; recon; _ } =
       [%message
         (x : int)
           (y : int)
           (dc_pred : int)
           (component.identifier : int)
-          (coefs : coef)
-          (dequant : coef)
-          (idct : pel)]
+          (coefs : coef_block)
+          (dequant : coef_block)
+          (idct : pixel_block)
+          (recon : pixel_block)]
     ;;
   end
 end
 
-type t = { components : Component.t array }
+type t =
+  { components : Component.t array
+  ; entropy_coded_bits : Bits.t
+  }
+[@@deriving fields]
+
+let clip x = if x < -128 then -128 else if x > 127 then 127 else x
+
+let recon { Component.plane; x; y; idct; recon; _ } =
+  for j = 0 to 7 do
+    for i = 0 to 7 do
+      let k = i + (j * 8) in
+      idct.(k) <- clip idct.(k);
+      recon.(k) <- idct.(k) + 128;
+      Plane.(plane.![x + i, y + j] <- Char.of_int_exn recon.(k))
+    done
+  done
+;;
 
 let find_component (scan : Markers.Scan_component.t) (frame : Markers.Sof.t) =
   match Array.find frame.components ~f:(fun c -> c.identifier = scan.selector) with
@@ -285,7 +299,29 @@ let find_ac_huffman_table huffman_tables id =
   |> Tables.Lut.create
 ;;
 
-let init (header : Header.t) =
+let extract_entropy_coded_bits bits =
+  let buffer = Buffer.create 1024 in
+  let rec search_for_marker pos prev =
+    let c = Bits.get_byte bits pos in
+    if Char.equal prev '\xff'
+    then
+      if Char.equal c '\x00'
+      then (
+        Buffer.add_char buffer prev;
+        search_for_marker (pos + 1) c)
+      else Buffer.contents buffer
+    else if Char.equal c '\xff'
+    then search_for_marker (pos + 1) c
+    else (
+      Buffer.add_char buffer c;
+      search_for_marker (pos + 1) c)
+  in
+  let pos = Bits.bit_pos bits lsr 3 in
+  let entropy_data = search_for_marker pos '\x00' in
+  Bits.create entropy_data
+;;
+
+let init (header : Header.t) bits =
   match header with
   | { frame = Some frame
     ; scan = Some scan
@@ -320,32 +356,11 @@ let init (header : Header.t) =
           ; coefs = Array.init 64 ~f:(Fn.const 0)
           ; dequant = Array.init 64 ~f:(Fn.const 0)
           ; idct = Array.init 64 ~f:(Fn.const 0)
+          ; recon = Array.init 64 ~f:(Fn.const 0)
           })
     in
-    { components }
+    { components; entropy_coded_bits = extract_entropy_coded_bits bits }
   | _ -> raise_s [%message "not start of frame or sequence" (header : Header.t)]
-;;
-
-let extract_entropy_coded_bits bits =
-  let buffer = Buffer.create 1024 in
-  let rec search_for_marker pos prev =
-    let c = Bits.get_byte bits pos in
-    if Char.equal prev '\xff'
-    then
-      if Char.equal c '\x00'
-      then (
-        Buffer.add_char buffer prev;
-        search_for_marker (pos + 1) c)
-      else Buffer.contents buffer
-    else if Char.equal c '\xff'
-    then search_for_marker (pos + 1) c
-    else (
-      Buffer.add_char buffer c;
-      search_for_marker (pos + 1) c)
-  in
-  let pos = Bits.bit_pos bits lsr 3 in
-  let entropy_data = search_for_marker pos '\x00' in
-  Bits.create entropy_data
 ;;
 
 let decode_block ~bits ~(component : Component.t) =
@@ -360,7 +375,7 @@ let decode_block ~bits ~(component : Component.t) =
          ~qnt_tab:component.quant_table;
   Array.blito ~src:component.dequant ~dst:component.idct ();
   Dct.Chen.inverse_8x8 component.idct;
-  recon ~block:component.idct ~plane:component.plane component.x component.y
+  recon component
 ;;
 
 let decode_component_seq ~bits ~(component : Component.t) ~blk_x ~blk_y =
@@ -375,22 +390,19 @@ let decode_component_seq ~bits ~(component : Component.t) ~blk_x ~blk_y =
   |> Sequence.concat
 ;;
 
-let decode_seq decoder (bits : Bits.t) =
-  let entropy_coded_bits = extract_entropy_coded_bits bits in
+let decode_seq { components; entropy_coded_bits } =
   let blocks_wide =
-    decoder.components.(0).width
-    / (8 * decoder.components.(0).component.horizontal_sampling_factor)
+    components.(0).width / (8 * components.(0).component.horizontal_sampling_factor)
   in
   let blocks_high =
-    decoder.components.(0).height
-    / (8 * decoder.components.(0).component.vertical_sampling_factor)
+    components.(0).height / (8 * components.(0).component.vertical_sampling_factor)
   in
   Sequence.init blocks_high ~f:(fun blk_y ->
       Sequence.init blocks_wide ~f:(fun blk_x ->
-          Sequence.init (Array.length decoder.components) ~f:(fun id ->
+          Sequence.init (Array.length components) ~f:(fun id ->
               decode_component_seq
                 ~bits:entropy_coded_bits
-                ~component:decoder.components.(id)
+                ~component:components.(id)
                 ~blk_x
                 ~blk_y)
           |> Sequence.concat)
@@ -398,7 +410,7 @@ let decode_seq decoder (bits : Bits.t) =
   |> Sequence.concat
 ;;
 
-let decode decoder bits = decode_seq decoder bits |> Sequence.iter ~f:(fun _ -> ())
+let decode decoder = decode_seq decoder |> Sequence.iter ~f:(fun _ -> ())
 
 let get_frame decoder =
   Frame.of_planes
@@ -409,8 +421,8 @@ let get_frame decoder =
 
 let decode_a_frame bits =
   let header = Header.decode bits in
-  let decoder = init header in
-  decode decoder bits;
+  let decoder = init header bits in
+  decode decoder;
   get_frame decoder
 ;;
 
@@ -419,6 +431,6 @@ module For_testing = struct
   let extract_entropy_coded_bits = extract_entropy_coded_bits
 
   module Sequenced = struct
-    let decode decoder bits = Sequence.memoize (decode_seq decoder bits)
+    let decode decoder = Sequence.memoize (decode_seq decoder)
   end
 end

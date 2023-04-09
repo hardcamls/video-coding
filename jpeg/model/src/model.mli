@@ -23,15 +23,22 @@ module Component : sig
   type t [@@deriving sexp_of]
 
   module Summary : sig
+    type coef_block = int array [@@deriving sexp_of]
+    type pixel_block = int array [@@deriving sexp_of]
     type nonrec t = t [@@deriving sexp_of]
   end
+
+  val coefs : t -> int array
+  val dequant : t -> int array
+  val recon : t -> int array
 end
 
 type t
 
-val init : Header.t -> t
-val decode : t -> Bits.t -> unit
+val init : Header.t -> Bits.t -> t
+val decode : t -> unit
 val get_frame : t -> Frame.t
+val entropy_coded_bits : t -> Bits.t
 
 (** Decode frame data.  Bits should aligned to the entropy coded segment. *)
 val decode_a_frame : Bits.t -> Frame.t
@@ -55,6 +62,6 @@ module For_testing : sig
 
        The component just decoded is returned.
     *)
-    val decode : t -> Bits.t -> Component.t Sequence.t
+    val decode : t -> Component.t Sequence.t
   end
 end

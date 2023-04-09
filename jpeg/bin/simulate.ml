@@ -30,10 +30,19 @@ let command_decoder =
       and yuv = flag "-yuv" (optional string) ~doc:""
       and num_blocks_to_decode =
         flag "-blocks" (optional int) ~doc:"Number of blocks to decode in simulation"
+      and error_tolerance =
+        flag
+          "-error-tolerance"
+          (optional int)
+          ~doc:"Allowable error in reconstructed pixels compare to model reference"
       in
       fun () ->
         let frame, waves =
-          Hardcaml_jpeg_test.Test_decoder.test ~waves:true ?num_blocks_to_decode jpeg
+          Hardcaml_jpeg_test.Test_decoder.test
+            ~waves:true
+            ?num_blocks_to_decode
+            ?error_tolerance
+            jpeg
         in
         Option.iter yuv ~f:(fun yuv ->
             Out_channel.with_file yuv ~f:(fun yuv ->

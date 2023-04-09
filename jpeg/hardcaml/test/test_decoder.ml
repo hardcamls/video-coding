@@ -51,7 +51,6 @@ module Sim = Cyclesim.With_interface (Decoder.I) (Decoder.O)
 let ( <--. ) a b = a := Bits.of_int ~width:(Bits.width !a) b
 
 let reconstruct block_number frame pixels =
-  let pixels = Array.of_list pixels in
   let macroblock = block_number / 6 in
   let subblock = block_number % 6 in
   let width = Frame.width frame in
@@ -77,20 +76,30 @@ let reconstruct block_number frame pixels =
   | _ -> failwith ""
 ;;
 
-let test ?(waves = true) ?num_blocks_to_decode jpeg =
-  let headers, entropy_bits = Util.headers_and_entropy_coded_segment jpeg in
+let max_reconstructed_diff pixels recon =
+  Array.fold2_exn pixels recon ~init:0 ~f:(fun acc a b ->
+      let diff = Int.abs (a - b) in
+      if diff > acc then acc else diff)
+;;
+
+let test ?(waves = true) ?(error_tolerance = 1) ?num_blocks_to_decode jpeg =
+  let bits = Util.load_jpeg_file jpeg in
+  let headers = Model.Header.decode bits in
+  let decoder = Model.init headers bits in
+  let entropy_coded_bits =
+    Model.entropy_coded_bits decoder |> Bitstream_reader.From_string.get_buffer
+  in
+  let model = Model.For_testing.Sequenced.decode decoder in
+  (* let headers, entropy_bits = Util.headers_and_entropy_coded_segment jpeg in *)
   let width = (Model.Header.frame headers |> Option.value_exn).width in
   let height = (Model.Header.frame headers |> Option.value_exn).height in
-  let total_luma_blocks = width / 8 * (height / 8) in
-  let total_blocks = total_luma_blocks + (total_luma_blocks / 2) in
-  let num_blocks_to_decode = Option.value ~default:total_blocks num_blocks_to_decode in
-  print_s [%message (width : int) (height : int) (total_blocks : int)];
+  print_s [%message (width : int) (height : int)];
   let frame = Frame.create ~chroma_subsampling:C420 ~width ~height in
   let sim =
     Sim.create
       ~config:{ Cyclesim.Config.trace_all with deduplicate_signals = false }
       (Decoder.create
-         ~bits:entropy_bits
+         ~bits:entropy_coded_bits
          (Scope.create ~auto_label_hierarchical_ports:true ~flatten_design:true ()))
   in
   let waves, sim =
@@ -145,14 +154,30 @@ let test ?(waves = true) ?num_blocks_to_decode jpeg =
     cycle ();
     inputs.output_done := Bits.vdd;
     cycle ();
-    List.rev !pixels
+    List.rev !pixels |> Array.of_list
+  in
+  let rec decode_and_compare_with_model model block_number =
+    match num_blocks_to_decode with
+    | Some num_blocks_to_decode when block_number >= num_blocks_to_decode ->
+      (* finish early *) ()
+    | Some _ | None ->
+      (match Sequence.hd model with
+      | None -> () (* finished decoding *)
+      | Some comp ->
+        (* Run simulator *)
+        let pixels = output_a_block () in
+        reconstruct block_number frame pixels;
+        if max_reconstructed_diff pixels (Model.Component.recon comp) >= error_tolerance
+        then
+          print_s
+            [%message
+              (block_number : int)
+                (pixels : Model.Component.Summary.pixel_block)
+                (comp : Model.Component.Summary.t)];
+        decode_and_compare_with_model (Sequence.tl_eagerly_exn model) (block_number + 1))
   in
   try
-    for block_number = 0 to num_blocks_to_decode - 1 do
-      let pixels = output_a_block () in
-      reconstruct block_number frame pixels;
-      print_s [%message (block_number : int) (pixels : Int.t list)]
-    done;
+    decode_and_compare_with_model model 0;
     for _ = 0 to 10 do
       Cyclesim.cycle sim
     done;
@@ -170,49 +195,13 @@ let%expect_test "test decoder" =
     ~f:(Waveform.print ~display_height:50 ~display_width:120 ~wave_width:2 ~start_cycle:0);
   [%expect
     {|
-    ((width 480) (height 320) (total_blocks 3600))
+    ((width 480) (height 320))
     ((macroblock 0) (subblock 0) (width 480) (x_pos 0) (y_pos 0))
-    ((block_number 0)
-     (pixels
-      (224 222 219 214 209 205 202 200 228 226 223 219 215 211 207 206 233 232
-       230 226 223 219 217 215 238 237 235 233 230 228 226 225 239 239 238 236
-       235 234 233 232 237 237 237 236 236 236 236 235 233 233 234 234 235 235
-       235 236 230 231 231 232 233 234 235 235)))
     ((macroblock 0) (subblock 1) (width 480) (x_pos 0) (y_pos 0))
-    ((block_number 1)
-     (pixels
-      (191 191 191 191 191 191 191 191 207 207 207 207 207 207 207 207 227 227
-       227 227 227 227 227 227 239 239 239 239 239 239 239 239 240 240 240 240
-       240 240 240 240 238 238 238 238 238 238 238 238 240 240 240 240 240 240
-       240 240 242 242 242 242 242 242 242 242)))
     ((macroblock 0) (subblock 2) (width 480) (x_pos 0) (y_pos 0))
-    ((block_number 2)
-     (pixels
-      (198 203 212 221 228 232 233 234 179 183 189 198 208 218 226 230 165 165
-       166 172 183 197 211 220 175 170 164 162 168 181 195 205 202 194 182 173
-       171 176 185 192 222 215 204 193 186 184 185 187 222 220 215 209 203 197
-       193 191 214 215 216 216 213 207 201 198)))
     ((macroblock 0) (subblock 3) (width 480) (x_pos 0) (y_pos 0))
-    ((block_number 3)
-     (pixels
-      (215 224 236 246 249 244 236 229 215 221 229 237 241 242 240 238 210 211
-       213 218 225 233 241 245 196 193 190 192 200 215 230 240 180 175 169 169
-       178 194 212 224 171 167 162 161 168 182 197 207 174 171 168 168 173 181
-       190 196 179 178 177 178 181 185 190 193)))
     ((macroblock 0) (subblock 4) (width 480) (x_pos 0) (y_pos 0))
-    ((block_number 4)
-     (pixels
-      (128 128 128 128 128 128 128 128 128 128 128 128 128 128 128 128 128 128
-       128 128 128 128 128 128 128 128 128 128 128 128 128 128 128 128 128 128
-       128 128 128 128 128 128 128 128 128 128 128 128 128 128 128 128 128 128
-       128 128 128 128 128 128 128 128 128 128)))
     ((macroblock 0) (subblock 5) (width 480) (x_pos 0) (y_pos 0))
-    ((block_number 5)
-     (pixels
-      (123 123 123 123 123 123 123 123 123 123 123 123 123 123 123 123 123 123
-       123 123 123 123 123 123 123 123 123 123 123 123 123 123 123 123 123 123
-       123 123 123 123 123 123 123 123 123 123 123 123 123 123 123 123 123 123
-       123 123 123 123 123 123 123 123 123 123)))
     ┌Signals───────────┐┌Waves─────────────────────────────────────────────────────────────────────────────────────────────┐
     │clocking$clear    ││──────┐                                                                                           │
     │                  ││      └───────────────────────────────────────────────────────────────────────────────────────────│

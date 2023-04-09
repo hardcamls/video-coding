@@ -38,8 +38,8 @@ let command_decode_log =
         let bits = Model.Bits.create (In_channel.read_all bits) in
         let header = Model.Header.decode bits in
         print_s [%message (header : Model.Header.t)];
-        let decoder = Model.init header in
-        let decoded = Model.For_testing.Sequenced.decode decoder bits in
+        let decoder = Model.init header bits in
+        let decoded = Model.For_testing.Sequenced.decode decoder in
         let rec decode decoded =
           match Sequence.hd decoded with
           | None -> (* done *) ()
