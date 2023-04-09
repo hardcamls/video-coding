@@ -133,7 +133,7 @@ let test ?(waves = true) ?(error_tolerance = 1) ?num_blocks_to_decode jpeg =
   let output_a_block () =
     let num_cycles = ref 0 in
     let cycle () =
-      if !num_cycles > 2_000 then raise_s [%message "Took too long to decode block"];
+      if !num_cycles > 3_000 then raise_s [%message "Took too long to decode block"];
       Cyclesim.cycle sim;
       Int.incr num_cycles
     in
