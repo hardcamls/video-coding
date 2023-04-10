@@ -67,16 +67,20 @@ let test ?(waves = true) jpeg =
     else None, sim
   in
   let inputs = Cyclesim.inputs sim in
-  let _outputs = Cyclesim.outputs sim in
+  let outputs = Cyclesim.outputs sim in
   inputs.clocking.clear := Bits.vdd;
   Cyclesim.cycle sim;
   inputs.clocking.clear := Bits.gnd;
   inputs.start := Bits.vdd;
   Cyclesim.cycle sim;
   inputs.start := Bits.gnd;
-  for _ = 1 to 1_000 do
+  while not (Bits.to_bool !(outputs.done_)) do
     Cyclesim.cycle sim
   done;
+  Cyclesim.cycle sim;
+  Cyclesim.cycle sim;
+  let markers = Markers.map outputs.markers ~f:(fun d -> Bits.to_int !d) in
+  print_s [%message (markers : int Markers.t)];
   waves
 ;;
 
@@ -107,6 +111,32 @@ let%expect_test "debug vld" =
       "000000a0  00 11 08 01 40 01 e0 03  01 22 00 02 11 01 03 11  |....@....\"......|"
       "000000b0  01 ff c4 00 1a 00 00 03  01 01 01 01 00 00 00 00  |................|"
       "000000c0  00 00 00 00 00 00 00 01                           |........|"))
+    (markers
+     ((sof
+       ((frame_header
+         ((length 17) (sample_precision 8) (height 320) (width 480)
+          (number_of_components 3)))
+        (component
+         ((identifier 3) (vertical_sampling_factor 1)
+          (horizontal_sampling_factor 1) (quantization_table_identifier 1)))
+        (component_address 0) (component_write 0)))
+      (sos
+       ((header ((length 12) (number_of_image_components 3)))
+        (scan_selector ((selector 3) (dc_coef_selector 1) (ac_coef_selector 1)))
+        (write_scan_selector 0)
+        (footer
+         ((start_of_predictor_selection 0) (end_of_predictor_selection 63)
+          (successive_approximation_bit_high 0)
+          (successive_approximation_bit_low 0)))))
+      (dqt
+       ((fields ((length 67) (element_precision 0) (table_identifier 1)))
+        (element 245) (element_address 0) (element_write 0)))
+      (dht
+       ((header ((length 22) (table_class 1) (destination_identifier 1)))
+        (code
+         ((code_length_minus1 0) (num_codes_at_length 245) (code 49152)
+          (code_base_address 3) (code_write 0)))
+        (code_data ((data 245) (data_address 3) (data_write 0)))))))
     ┌Signals───────────┐┌Waves─────────────────────────────────────────────────────────────────────────────────────────────┐
     │clock             ││┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌─│
     │                  ││   └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘ │
