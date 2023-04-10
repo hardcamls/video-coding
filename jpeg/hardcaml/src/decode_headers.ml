@@ -64,7 +64,9 @@ module Core = struct
       | Sos
       | Dqt
       | Dht
-      | Dri
+      (* | Dri *)
+      | Skip_length
+      | Skip
       | Error
     [@@deriving sexp_of, compare, enumerate]
   end
@@ -73,7 +75,7 @@ module Core = struct
     let ( -- ) = Scope.naming scope in
     let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
     ignore (sm.current -- "STATE");
-    let read_bits = Var.wire ~default:gnd in
+    let read_bits = Clocking.Var.reg i.clocking ~width:1 in
     let error = Error.Of_always.wire zero in
     let dht = Markers.Dht.O.Of_signal.wires () in
     let start_dht = Clocking.Var.reg i.clocking ~width:1 in
@@ -83,6 +85,12 @@ module Core = struct
     let start_sof = Clocking.Var.reg i.clocking ~width:1 in
     let sos = Markers.Sos.O.Of_signal.wires () in
     let start_sos = Clocking.Var.reg i.clocking ~width:1 in
+    let skip_count = Clocking.Var.reg i.clocking ~width:16 in
+    let skip_length = Clocking.Var.reg i.clocking ~width:16 in
+    ignore (skip_length.value -- "SKIP_LENGTH" : Signal.t);
+    let skip_length_next = skip_length.value.:[7, 0] @: i.bits in
+    let skip_count_next = skip_count.value +:. 1 in
+    ignore (skip_count.value -- "SKIP_COUNT" : Signal.t);
     let _set_error e =
       Always.proc
         [ Error.Of_always.assign error (Error.of_enum (module Signal) e)
@@ -97,37 +105,62 @@ module Core = struct
         ; start_sof <-- gnd
         ; start_sos <-- gnd
         ; sm.switch
-            [ Start, [ when_ i.start [ sm.set_next Find_ff ] ]
+            [ Start, [ when_ i.start [ read_bits <-- vdd; sm.set_next Find_ff ] ]
             ; ( Find_ff
-              , [ read_bits <-- vdd
-                ; when_
+              , [ when_
                     i.bits_valid
                     [ when_ (i.bits ==:. 0xFF) [ sm.set_next Check_marker ] ]
                 ] )
             ; ( Check_marker
-              , [ read_bits <-- vdd
+              , [ skip_count <--. 0
                 ; when_
                     i.bits_valid
-                    [ switch
+                    [ sm.set_next Skip_length
+                    ; switch
                         i.bits
                         ([ ( Marker_code.sof0
-                           , [ read_bits <-- vdd; start_sof <-- vdd; sm.set_next Sof ] )
+                           , [ read_bits <-- gnd; start_sof <-- vdd; sm.set_next Sof ] )
                          ; ( Marker_code.sos
-                           , [ read_bits <-- vdd; start_sos <-- vdd; sm.set_next Sos ] )
+                           , [ read_bits <-- gnd; start_sos <-- vdd; sm.set_next Sos ] )
                          ; ( Marker_code.dqt
-                           , [ read_bits <-- vdd; start_dqt <-- vdd; sm.set_next Dqt ] )
+                           , [ read_bits <-- gnd; start_dqt <-- vdd; sm.set_next Dqt ] )
                          ; ( Marker_code.dht
-                           , [ read_bits <-- vdd; start_dht <-- vdd; sm.set_next Dht ] )
-                         ; Marker_code.dri, [ read_bits <--. 16 ]
+                           , [ read_bits <-- gnd; start_dht <-- vdd; sm.set_next Dht ] )
+                         ; Marker_code.soi, [ sm.set_next Find_ff ]
+                         ; Marker_code.eoi, [ sm.set_next Find_ff ]
+                         ; 0xff, [ sm.set_next Check_marker ]
                          ]
                         |> List.map ~f:(fun (s, c) -> Signal.of_int ~width:8 s, c))
                     ]
                 ] )
-            ; Sof, [ when_ sof.done_ [ sm.set_next Find_ff ] ]
+            ; Sof, [ when_ sof.done_ [ read_bits <-- vdd; sm.set_next Find_ff ] ]
             ; Sos, [ when_ sos.done_ [ sm.set_next Start ] ]
-            ; Dqt, [ when_ dqt.done_ [ sm.set_next Find_ff ] ]
-            ; Dht, [ when_ dht.done_ [ sm.set_next Find_ff ] ]
-            ; Dri, []
+            ; Dqt, [ when_ dqt.done_ [ read_bits <-- vdd; sm.set_next Find_ff ] ]
+            ; Dht, [ when_ dht.done_ [ read_bits <-- vdd; sm.set_next Find_ff ] ]
+            ; ( Skip_length
+              , [ when_
+                    i.bits_valid
+                    [ skip_count <-- skip_count_next
+                    ; skip_length <-- skip_length_next
+                    ; when_
+                        skip_count.value.:(0)
+                        [ skip_count <--. 3
+                        ; if_
+                            (skip_length_next ==:. 2)
+                            [ sm.set_next Find_ff ]
+                            [ sm.set_next Skip ]
+                        ]
+                    ]
+                ] )
+            ; ( Skip
+              , [ when_
+                    i.bits_valid
+                    [ skip_count <-- skip_count_next
+                    ; when_
+                        (skip_count.value ==: skip_length.value)
+                        [ sm.set_next Find_ff ]
+                    ]
+                ] )
             ; Error, []
             ]
         ]);

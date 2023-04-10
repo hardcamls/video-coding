@@ -12,7 +12,7 @@ module Decoder = struct
     type 'a t =
       { clocking : 'a Clocking.t
       ; start : 'a
-      ; markers : 'a Vld.Core.All_markers.t
+      ; markers : 'a Decode_headers.Core.All_markers.t
       ; pixel_read_address : 'a [@bits 6]
       ; pixel_read_enable : 'a
       ; output_done : 'a

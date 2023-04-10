@@ -15,7 +15,10 @@ open Util
 module Dht = Wrapped_marker_decoder (Markers.Dht.Fields) (Markers.Dht)
 
 let test ?(verbose = false) ~start_cycle nth_marker =
-  let bits = Test_vld.load_jpeg () in
+  let bits =
+    Util.load_jpeg_file "Mouse480.jpg"
+    |> Hardcaml_jpeg_model.Bitstream_reader.From_string.get_buffer
+  in
   let dht_bits =
     find_nth_marker_exn
       ~n:nth_marker
@@ -48,7 +51,8 @@ let test ?(verbose = false) ~start_cycle nth_marker =
 
 let%expect_test "1st marker" =
   test ~verbose:true ~start_cycle:4 0;
-  [%expect{|
+  [%expect
+    {|
     (dht_bits
      ("00000000  00 1a 00 00 03 01 01 01  01 00 00 00 00 00 00 00  |................|"
       "00000010  00 00 00 00 01 02 03 04  05 06                    |..........|"))
@@ -128,7 +132,8 @@ let%expect_test "1st marker" =
 
 let%expect_test "2nd marker" =
   test ~verbose:true ~start_cycle:4 1;
-  [%expect{|
+  [%expect
+    {|
     (dht_bits
      ("00000000  00 2d 10 00 02 02 01 04  01 04 02 01 04 03 01 01  |.-..............|"
       "00000010  00 00 00 00 01 02 11 21  03 12 31 41 51 04 13 22  |.......!..1AQ..\"|"
