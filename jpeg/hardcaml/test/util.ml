@@ -109,17 +109,23 @@ struct
 
   let create ~bits scope (i : _ I.t) =
     let ( -- ) = Scope.naming scope in
-    let read_bits = wire 5 -- "READ_BITS" in
+    let read_bits = wire 1 -- "READ_BITS" in
     let bits =
       Super_simple_bitstream_reader.hierarchical
         ~bits
         scope
-        { Super_simple_bitstream_reader.I.clocking = i.clocking; read_bits }
+        { Super_simple_bitstream_reader.I.clocking = i.clocking
+        ; read_bits = mux2 read_bits (of_int ~width:5 8) (zero 5)
+        }
     in
     let decoder =
       D.hierarchical
         scope
-        { D.I.clocking = i.clocking; start = i.start; bits = bits.bits -- "BITS" }
+        { D.I.clocking = i.clocking
+        ; start = i.start
+        ; bits = bits.bits.:[15, 8] -- "BITS"
+        ; bits_valid = vdd
+        }
     in
     read_bits <== decoder.read_bits;
     { O.fields = decoder.fields; done_ = decoder.done_ }

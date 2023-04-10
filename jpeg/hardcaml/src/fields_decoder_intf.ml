@@ -8,6 +8,7 @@ module M (Fields : Interface.S) = struct
         { clocking : 'a Clocking.t
         ; start : 'a
         ; bits : 'a
+        ; bits_valid : 'a
         }
       [@@deriving sexp_of, hardcaml]
     end
@@ -31,14 +32,15 @@ module Ports (Fields : Interface.S) = struct
     type 'a t =
       { clocking : 'a Clocking.t
       ; start : 'a
-      ; bits : 'a [@bits 16]
+      ; bits : 'a [@bits 8]
+      ; bits_valid : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
 
   module O = struct
     type 'a t =
-      { read_bits : 'a [@bits 5]
+      { read_bits : 'a
       ; fields : 'a Fields.t
       ; done_ : 'a
       }

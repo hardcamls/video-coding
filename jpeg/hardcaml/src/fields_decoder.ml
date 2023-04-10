@@ -8,47 +8,45 @@ module Var = Always.Variable
 module Make (Fields : Interface.S) = struct
   include Ports (Fields)
 
+  let num_bytes_to_decode =
+    assert (Fields.sum_of_port_widths % 8 = 0);
+    Fields.sum_of_port_widths / 8
+  ;;
+
+  let log_num_bytes_to_decode = address_bits_for num_bytes_to_decode
+
   module State = struct
-    type t = string [@@deriving sexp_of, compare]
-
-    let all = Fields.(to_list port_names)
-    let num_states = List.length all
-
-    let next current =
-      let rec index i = function
-        | [] -> raise_s [%message "Invalid state" (current : string)]
-        | h :: t ->
-          if String.equal current h then (i + 1) % num_states else index (i + 1) t
-      in
-      let index = index 0 all in
-      List.nth_exn all index
-    ;;
+    type t =
+      | Start
+      | Stream
+    [@@deriving sexp_of, compare, enumerate]
   end
 
   let create _scope (i : _ I.t) =
     let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
-    let read_bits = Var.wire ~default:(zero 5) in
-    let fields = Fields.Of_always.reg (Clocking.to_spec i.clocking) in
-    let states =
-      Fields.(
-        map3 port_names port_widths fields ~f:(fun name width field ->
-            ( name
-            , Always.
-                [ read_bits <--. width
-                ; (field <-- if width = 16 then bswap i.bits else i.bits.:[width - 1, 0])
-                ; sm.set_next (State.next name)
-                ] )))
-    in
-    let states =
-      Fields.to_list states
-      |> List.mapi ~f:(fun index (s, p) ->
-             if index = 0 then s, Always.[ when_ i.start p ] else s, p)
-    in
-    Always.(compile [ sm.switch states ]);
-    { O.read_bits = read_bits.value
-    ; fields = Fields.Of_always.value fields
-    ; done_ = sm.is (List.hd_exn State.all) &: ~:(i.start)
-    }
+    let count = Clocking.Var.reg i.clocking ~width:log_num_bytes_to_decode in
+    let shift_reg = Clocking.Var.reg i.clocking ~width:Fields.sum_of_port_widths in
+    let read = Clocking.Var.reg i.clocking ~width:1 in
+    Always.(
+      compile
+        [ sm.switch
+            [ Start, [ count <--. 0; when_ i.start [ read <-- vdd; sm.set_next Stream ] ]
+            ; ( Stream
+              , [ when_
+                    i.bits_valid
+                    [ count <-- count.value +:. 1
+                    ; shift_reg
+                      <-- shift_reg.value.:[Fields.sum_of_port_widths - 8 - 1, 0]
+                          @: i.bits
+                    ; when_
+                        (count.value ==:. num_bytes_to_decode - 1)
+                        [ read <-- gnd; sm.set_next Start ]
+                    ]
+                ] )
+            ]
+        ]);
+    let fields = Fields.Of_signal.unpack ~rev:true shift_reg.value in
+    { O.read_bits = read.value; fields; done_ = sm.is Start }
   ;;
 
   let hierarchical ?name scope =

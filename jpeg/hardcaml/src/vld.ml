@@ -10,7 +10,7 @@ module Core = struct
     type 'a t =
       { clocking : 'a Clocking.t
       ; start : 'a
-      ; bits : 'a [@bits 16]
+      ; bits : 'a [@bits 8]
       ; bits_valid : 'a
       }
     [@@deriving sexp_of, hardcaml]
@@ -47,7 +47,7 @@ module Core = struct
 
   module O = struct
     type 'a t =
-      { read_bits : 'a [@bits 5] (* 0..16 *)
+      { read_bits : 'a
       ; markers : 'a All_markers.t
       ; error : 'a Error.t [@rtlprefix "error_"]
       ; done_ : 'a
@@ -58,7 +58,8 @@ module Core = struct
   module State = struct
     type t =
       | Start
-      | Scan_markers
+      | Find_ff
+      | Check_marker
       | Sof
       | Sos
       | Dqt
@@ -72,7 +73,7 @@ module Core = struct
     let ( -- ) = Scope.naming scope in
     let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
     ignore (sm.current -- "STATE");
-    let read_bits = Var.wire ~default:(zero 5) in
+    let read_bits = Var.wire ~default:gnd in
     let error = Error.Of_always.wire zero in
     let dht = Markers.Dht.O.Of_signal.wires () in
     let start_dht = Clocking.Var.reg i.clocking ~width:1 in
@@ -96,37 +97,36 @@ module Core = struct
         ; start_sof <-- gnd
         ; start_sos <-- gnd
         ; sm.switch
-            [ Start, [ when_ i.start [ sm.set_next Scan_markers ] ]
-            ; ( Scan_markers
-              , [ when_
+            [ Start, [ when_ i.start [ sm.set_next Find_ff ] ]
+            ; ( Find_ff
+              , [ read_bits <-- vdd
+                ; when_
                     i.bits_valid
-                    [ read_bits <--. 8
-                    ; when_
-                        (i.bits.:[7, 0] ==:. 0xff)
-                        [ switch
-                            i.bits.:[15, 8]
-                            ([ ( Marker_code.sof0
-                               , [ read_bits <--. 16; start_sof <-- vdd; sm.set_next Sof ]
-                               )
-                             ; ( Marker_code.sos
-                               , [ read_bits <--. 16; start_sos <-- vdd; sm.set_next Sos ]
-                               )
-                             ; ( Marker_code.dqt
-                               , [ read_bits <--. 16; start_dqt <-- vdd; sm.set_next Dqt ]
-                               )
-                             ; ( Marker_code.dht
-                               , [ read_bits <--. 16; start_dht <-- vdd; sm.set_next Dht ]
-                               )
-                             ; Marker_code.dri, [ read_bits <--. 16 ]
-                             ]
-                            |> List.map ~f:(fun (s, c) -> Signal.of_int ~width:8 s, c))
-                        ]
+                    [ when_ (i.bits ==:. 0xFF) [ sm.set_next Check_marker ] ]
+                ] )
+            ; ( Check_marker
+              , [ read_bits <-- vdd
+                ; when_
+                    i.bits_valid
+                    [ switch
+                        i.bits
+                        ([ ( Marker_code.sof0
+                           , [ read_bits <-- vdd; start_sof <-- vdd; sm.set_next Sof ] )
+                         ; ( Marker_code.sos
+                           , [ read_bits <-- vdd; start_sos <-- vdd; sm.set_next Sos ] )
+                         ; ( Marker_code.dqt
+                           , [ read_bits <-- vdd; start_dqt <-- vdd; sm.set_next Dqt ] )
+                         ; ( Marker_code.dht
+                           , [ read_bits <-- vdd; start_dht <-- vdd; sm.set_next Dht ] )
+                         ; Marker_code.dri, [ read_bits <--. 16 ]
+                         ]
+                        |> List.map ~f:(fun (s, c) -> Signal.of_int ~width:8 s, c))
                     ]
                 ] )
-            ; Sof, [ when_ sof.done_ [ sm.set_next Scan_markers ] ]
+            ; Sof, [ when_ sof.done_ [ sm.set_next Find_ff ] ]
             ; Sos, [ when_ sos.done_ [ sm.set_next Start ] ]
-            ; Dqt, [ when_ dqt.done_ [ sm.set_next Scan_markers ] ]
-            ; Dht, [ when_ dht.done_ [ sm.set_next Scan_markers ] ]
+            ; Dqt, [ when_ dqt.done_ [ sm.set_next Find_ff ] ]
+            ; Dht, [ when_ dht.done_ [ sm.set_next Find_ff ] ]
             ; Dri, []
             ; Error, []
             ]
@@ -135,30 +135,40 @@ module Core = struct
       dht
       (Markers.Dht.hierarchical
          scope
-         { Markers.Dht.I.clocking = i.clocking; start = start_dht.value; bits = i.bits });
+         { Markers.Dht.I.clocking = i.clocking
+         ; start = start_dht.value
+         ; bits = i.bits
+         ; bits_valid = i.bits_valid
+         });
     Markers.Dqt.O.Of_signal.assign
       dqt
       (Markers.Dqt.hierarchical
          scope
-         { Markers.Dqt.I.clocking = i.clocking; start = start_dqt.value; bits = i.bits });
+         { Markers.Dqt.I.clocking = i.clocking
+         ; start = start_dqt.value
+         ; bits = i.bits
+         ; bits_valid = i.bits_valid
+         });
     Markers.Sof.O.Of_signal.assign
       sof
       (Markers.Sof.hierarchical
          scope
-         { Markers.Sof.I.clocking = i.clocking; start = start_sof.value; bits = i.bits });
+         { Markers.Sof.I.clocking = i.clocking
+         ; start = start_sof.value
+         ; bits = i.bits
+         ; bits_valid = i.bits_valid
+         });
     Markers.Sos.O.Of_signal.assign
       sos
       (Markers.Sos.hierarchical
          scope
-         { Markers.Sos.I.clocking = i.clocking; start = start_sos.value; bits = i.bits });
+         { Markers.Sos.I.clocking = i.clocking
+         ; start = start_sos.value
+         ; bits = i.bits
+         ; bits_valid = i.bits_valid
+         });
     let read_bits =
-      priority_select_with_default
-        [ { valid = ~:(dht.done_); value = dht.read_bits }
-        ; { valid = ~:(dqt.done_); value = dqt.read_bits }
-        ; { valid = ~:(sof.done_); value = sof.read_bits }
-        ; { valid = ~:(sos.done_); value = sos.read_bits }
-        ]
-        ~default:read_bits.value
+      dht.read_bits |: dqt.read_bits |: sof.read_bits |: sos.read_bits |: read_bits.value
     in
     { O.read_bits
     ; markers = { dht = dht.fields; dqt = dqt.fields; sof = sof.fields; sos = sos.fields }
@@ -174,6 +184,8 @@ module Core = struct
 end
 
 module With_reader = struct
+  open Signal
+
   module I = struct
     type 'a t =
       { clocking : 'a Clocking.t
@@ -203,7 +215,11 @@ module With_reader = struct
         (hierarchical
            scope
            { I.clocking = i.clocking
-           ; advance_bits = vld.read_bits
+           ; advance_bits =
+               mux2
+                 (vld.read_bits &: reader.bits_out_available)
+                 (of_int ~width:5 8)
+                 (zero 5)
            ; bits_in = i.bits_in
            ; bits_in_available = i.bits_in_available
            }));
@@ -214,7 +230,7 @@ module With_reader = struct
            scope
            { Core.I.clocking = i.clocking
            ; start = i.start
-           ; bits = reader.bits
+           ; bits = reader.bits.:[15, 8]
            ; bits_valid = reader.bits_out_available
            }));
     { O.markers = vld.markers

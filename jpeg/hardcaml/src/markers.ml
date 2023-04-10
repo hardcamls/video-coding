@@ -111,7 +111,11 @@ module Sof = struct
       (Header.hierarchical
          scope
          ~name:"sofhdr"
-         { Header.I.clocking = i.clocking; start = i.start; bits = i.bits });
+         { Header.I.clocking = i.clocking
+         ; start = i.start
+         ; bits = i.bits
+         ; bits_valid = i.bits_valid
+         });
     Component.O.Of_signal.assign
       component
       (Component.hierarchical
@@ -120,13 +124,9 @@ module Sof = struct
          { Component.I.clocking = i.clocking
          ; start = start_component.value
          ; bits = i.bits
+         ; bits_valid = i.bits_valid
          });
-    { O.read_bits =
-        priority_select_with_default
-          ~default:header.read_bits
-          [ { valid = ~:(header.done_); value = header.read_bits }
-          ; { valid = ~:(component.done_); value = component.read_bits }
-          ]
+    { O.read_bits = header.read_bits |: component.read_bits
     ; fields =
         { frame_header = header.fields
         ; component = component.fields
@@ -245,7 +245,11 @@ module Sos = struct
       (Header.hierarchical
          scope
          ~name:"soshdr"
-         { Header.I.clocking = i.clocking; start = i.start; bits = i.bits });
+         { Header.I.clocking = i.clocking
+         ; start = i.start
+         ; bits = i.bits
+         ; bits_valid = i.bits_valid
+         });
     Scan_selector.O.Of_signal.assign
       scan_selector
       (Scan_selector.hierarchical
@@ -254,20 +258,19 @@ module Sos = struct
          { Scan_selector.I.clocking = i.clocking
          ; start = start_scan.value
          ; bits = i.bits
+         ; bits_valid = i.bits_valid
          });
     Footer.O.Of_signal.assign
       footer
       (Footer.hierarchical
          scope
          ~name:"sosftr"
-         { Footer.I.clocking = i.clocking; start = start_footer.value; bits = i.bits });
-    { O.read_bits =
-        priority_select_with_default
-          ~default:(zero 5)
-          [ { valid = ~:(header.done_); value = header.read_bits }
-          ; { valid = ~:(scan_selector.done_); value = scan_selector.read_bits }
-          ; { valid = ~:(footer.done_); value = footer.read_bits }
-          ]
+         { Footer.I.clocking = i.clocking
+         ; start = start_footer.value
+         ; bits = i.bits
+         ; bits_valid = i.bits_valid
+         });
+    { O.read_bits = header.read_bits |: scan_selector.read_bits |: footer.read_bits
     ; fields =
         { Fields.header = header.fields
         ; scan_selector = scan_selector.fields
@@ -326,17 +329,25 @@ module Dqt = struct
     let header = Header.O.Of_signal.wires () in
     let count = Clocking.Var.reg i.clocking ~width:6 in
     let count_next = count.value +:. 1 in
-    let element_write = Var.wire ~default:gnd in
+    let element_write = Clocking.Var.reg i.clocking ~width:1 in
     Always.(
       compile
         [ sm.switch
             [ ( Start
               , [ done_ <-- vdd; when_ i.start [ done_ <-- gnd; sm.set_next Header ] ] )
-            ; Header, [ when_ header.done_ [ sm.set_next Table; count <--. 0 ] ]
+            ; ( Header
+              , [ when_
+                    header.done_
+                    [ sm.set_next Table; element_write <-- vdd; count <--. 0 ]
+                ] )
             ; ( Table
-              , [ count <-- count_next
-                ; element_write <-- vdd
-                ; when_ (count.value ==:. 63) [ sm.set_next Start ]
+              , [ when_
+                    i.bits_valid
+                    [ count <-- count_next
+                    ; when_
+                        (count.value ==:. 63)
+                        [ element_write <-- gnd; sm.set_next Start ]
+                    ]
                 ] )
             ]
         ]);
@@ -345,8 +356,12 @@ module Dqt = struct
       (Header.hierarchical
          scope
          ~name:"dqthdr"
-         { Header.I.clocking = i.clocking; start = i.start; bits = i.bits });
-    { O.read_bits = mux2 element_write.value (of_int ~width:5 8) header.read_bits
+         { Header.I.clocking = i.clocking
+         ; start = i.start
+         ; bits = i.bits
+         ; bits_valid = i.bits_valid
+         });
+    { O.read_bits = element_write.value |: header.read_bits
     ; fields =
         { fields = header.fields
         ; element = zero 8 @: i.bits.:[7, 0]
@@ -428,8 +443,8 @@ module Dht = struct
     let address_next = address.value +:. 1 in
     let total_codes = Clocking.Var.reg i.clocking ~width:16 in
     let code = Clocking.Var.reg i.clocking ~width:16 in
-    let code_write = Var.wire ~default:gnd in
-    let data_write = Var.wire ~default:gnd in
+    let code_write = Clocking.Var.reg i.clocking ~width:1 in
+    let data_write = Clocking.Var.reg i.clocking ~width:1 in
     let num_codes_at_length = i.bits.:[7, 0] in
     Always.(
       compile
@@ -442,22 +457,34 @@ module Dht = struct
                     [ sm.set_next Lengths
                     ; code <--. 0
                     ; total_codes <--. 0
+                    ; code_write <-- vdd
                     ; count4 <--. 0
                     ]
                 ] )
             ; ( Lengths
-              , [ count4 <-- count4_next
-                ; code <-- sll (code.value +: uresize num_codes_at_length 16) 1
-                ; total_codes <-- total_codes.value +: uresize num_codes_at_length 16
-                ; code_write <-- vdd
-                ; when_
-                    (count4.value ==:. 15)
-                    [ address <--. 0; count4 <--. 0; sm.set_next Values ]
+              , [ when_
+                    i.bits_valid
+                    [ count4 <-- count4_next
+                    ; code <-- sll (code.value +: uresize num_codes_at_length 16) 1
+                    ; total_codes <-- total_codes.value +: uresize num_codes_at_length 16
+                    ; when_
+                        (count4.value ==:. 15)
+                        [ code_write <-- gnd
+                        ; data_write <-- vdd
+                        ; address <--. 0
+                        ; count4 <--. 0
+                        ; sm.set_next Values
+                        ]
+                    ]
                 ] )
             ; ( Values
-              , [ address <-- address_next
-                ; data_write <-- vdd
-                ; when_ (address_next ==: total_codes.value) [ sm.set_next Start ]
+              , [ when_
+                    i.bits_valid
+                    [ address <-- address_next
+                    ; when_
+                        (address_next ==: total_codes.value)
+                        [ data_write <-- gnd; sm.set_next Start ]
+                    ]
                 ] )
             ]
         ]);
@@ -466,9 +493,12 @@ module Dht = struct
       (Header.hierarchical
          scope
          ~name:"dhthdr"
-         { Header.I.clocking = i.clocking; start = i.start; bits = i.bits });
-    { O.read_bits =
-        mux2 (data_write.value |: code_write.value) (of_int ~width:5 8) header.read_bits
+         { Header.I.clocking = i.clocking
+         ; start = i.start
+         ; bits = i.bits
+         ; bits_valid = i.bits_valid
+         });
+    { O.read_bits = data_write.value |: code_write.value |: header.read_bits
     ; fields =
         { header = header.fields
         ; code =
@@ -479,10 +509,7 @@ module Dht = struct
             ; code_write = code_write.value
             }
         ; code_data =
-            { data = i.bits.:[7, 0]
-            ; data_address = address.value
-            ; data_write = data_write.value
-            }
+            { data = i.bits; data_address = address.value; data_write = data_write.value }
         }
     ; done_ = done_.value
     }
