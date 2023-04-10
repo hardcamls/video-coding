@@ -2,7 +2,7 @@ open! Core
 open Hardcaml
 open Hardcaml_jpeg
 open Hardcaml_waveterm
-module Decode_headers = Hardcaml_jpeg.Decode_headers.Core
+module Decode_headers = Hardcaml_jpeg.Decode_headers
 module Markers = Decode_headers.All_markers
 
 module I = struct
