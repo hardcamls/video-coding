@@ -10,9 +10,11 @@ open! Hardcaml
 module I : sig
   type 'a t =
     { clocking : 'a Clocking.t
-    ; advance_bits : 'a
-    ; bits_in : 'a
-    ; bits_in_available : 'a
+    ; header_or_entropy_mode : 'a
+    ; read_header_byte : 'a
+    ; read_entropy_bits : 'a
+    ; jpeg_in : 'a
+    ; jpeg_valid : 'a
     }
   [@@deriving sexp_of, hardcaml]
 end
@@ -20,11 +22,12 @@ end
 module O : sig
   type 'a t =
     { bits : 'a
-    ; bits_out_available : 'a
-    ; read_bits_in : 'a
+    ; bits_valid : 'a
+    ; jpeg_ready : 'a
     }
   [@@deriving sexp_of, hardcaml]
 end
 
 val create : Scope.t -> Interface.Create_fn(I)(O).t
 val hierarchical : Scope.t -> Interface.Create_fn(I)(O).t
+val create_new : Scope.t -> Interface.Create_fn(I)(O).t
