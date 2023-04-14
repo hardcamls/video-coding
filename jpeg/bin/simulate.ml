@@ -21,6 +21,27 @@ let command_codeblock =
         Option.iter waves ~f:Hardcaml_waveterm_interactive.run]
 ;;
 
+let command_filter_stuffed_bytes =
+  Command.basic
+    ~summary:"stuffed bytes simulation"
+    [%map_open.Command
+      let size = anon ("NUM-BYTES" %: int)
+      and verbose = flag "-verbose" no_arg ~doc:""
+      and waves = flag "-waves" no_arg ~doc:""
+      and seed = flag "-seed" (optional int) ~doc:""
+      and min = flag "-min" (optional int) ~doc:"" in
+      fun () ->
+        Option.iter seed ~f:Random.init;
+        let waves =
+          Hardcaml_jpeg_test.Test_filter_stuffed_bytes.regression
+            ~waves
+            ~verbose
+            ?min
+            size
+        in
+        Option.iter waves ~f:Hardcaml_waveterm_interactive.run]
+;;
+
 let command_decoder =
   Command.basic
     ~summary:"Decoder simulation"
@@ -56,6 +77,7 @@ let command =
     ; "headers", command_decode_headers
     ; "codeblock", command_codeblock
     ; "decoder", command_decoder
+    ; "filter-stuffed-bytes", command_filter_stuffed_bytes
     ]
 ;;
 
