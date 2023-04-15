@@ -51,8 +51,10 @@ let create scope (i : _ I.t) =
   ignore (have_buffered_byte.value -- "have_buffered_byte" : Signal.t);
   let buffered_byte = Clocking.Var.reg i.clocking ~width:8 in
   ignore (buffered_byte.value -- "buffered_byte" : Signal.t);
+  let last_byte = Clocking.Var.reg i.clocking ~width:8 in
+  ignore (last_byte.value -- "last_byte" : Signal.t);
   (* the last word contained a ff, so we might need to filter a 00 *)
-  let last_byte_was_ff = (buffered_byte.value ==:. 0xff) -- "last_byte_was_ff" in
+  let last_byte_was_ff = (last_byte.value ==:. 0xff) -- "last_byte_was_ff" in
   let remove_first_byte = (last_byte_was_ff &: first_byte.is_00) -- "remove_first_byte" in
   let remove_second_byte =
     (first_byte.is_ff &: second_byte.is_00) -- "remove_second_byte"
@@ -83,8 +85,10 @@ let create scope (i : _ I.t) =
                     [ o.o_data <-- buffered_byte.value @: second_byte.data
                     ; have_buffered_byte <-- gnd
                     ; buffered_byte <-- second_byte.data
+                    ; last_byte <-- second_byte.data
                     ]
                     [ buffered_byte <-- second_byte.data
+                    ; last_byte <-- second_byte.data
                     ; have_buffered_byte <-- vdd
                     ; o.o_valid <-- gnd
                     ]
@@ -95,14 +99,17 @@ let create scope (i : _ I.t) =
                     [ o.o_data <-- buffered_byte.value @: first_byte.data
                     ; have_buffered_byte <-- gnd
                     ; buffered_byte <-- first_byte.data
+                    ; last_byte <--. 0
                     ]
                     [ buffered_byte <-- first_byte.data
+                    ; last_byte <--. 0
                     ; have_buffered_byte <-- vdd
                     ; o.o_valid <-- gnd
                     ]
                 ]
             ]
             [ buffered_byte <-- second_byte.data
+            ; last_byte <-- second_byte.data
             ; if_
                 have_buffered_byte.value
                 [ o.o_data <-- buffered_byte.value @: first_byte.data ]
