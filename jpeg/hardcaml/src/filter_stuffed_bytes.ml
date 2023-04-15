@@ -110,15 +110,15 @@ let create scope (i : _ I.t) =
             ]
         ])
   in
+  let move_data = Var.wire ~default:gnd in
   Always.(
     compile
       [ if_
           o.o_valid.value
-          [ when_
-              i.o_ready
-              [ if_ i.i_valid [ move_data_downstream ] [ o.o_valid <-- gnd ] ]
+          [ when_ i.o_ready [ if_ i.i_valid [ move_data <-- vdd ] [ o.o_valid <-- gnd ] ]
           ]
-          [ when_ i.i_valid [ move_data_downstream ] ]
+          [ when_ i.i_valid [ move_data <-- vdd ] ]
+      ; when_ move_data.value [ move_data_downstream ]
       ]);
   O.Of_always.value o
 ;;

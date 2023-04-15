@@ -39,7 +39,11 @@ let command_filter_stuffed_bytes =
             ?min
             size
         in
-        Option.iter waves ~f:Hardcaml_waveterm_interactive.run]
+        Option.iter
+          waves
+          ~f:
+            (Hardcaml_waveterm_interactive.run
+               ~display_rules:Hardcaml_jpeg_test.Test_filter_stuffed_bytes.display_rules)]
 ;;
 
 let command_decoder =
