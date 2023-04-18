@@ -15,6 +15,14 @@ open Signal
    7. We can finish the entropy segment if we see 0xFF followed by a non-zero.  Presumably it 
       should be EOI.  
    8. We might want to output the trailing header to flush the entropy segment.
+
+  The central part uses a 40 bits shift register that shifts up in inrements of 8 or 16 bits.
+
+  We use the top 24 (actually 23) bits to hold the (shifted) 16 bit output.  So we need
+  to shift the output by 0..7 bits.
+
+  16 bit input data enters at the bottom 24 bits (though at a byte boundary) depending 
+  the current shift offset.
 *)
 
 module I = struct
@@ -40,17 +48,6 @@ module O = struct
     }
   [@@deriving sexp_of, hardcaml]
 end
-
-(* Another way of thinking about this. 
-   
-  We have a 40 bit shift register.  It shifts up in increments of 8 or 16 bits.
-
-  We use the top 24 (actually 23) bits to hold the (shifted) 16 bit output.  So we need
-  to shift the output by 0..7 bits.
-
-  16 bit input data enters at the bottom 24 bits (though at a byte boundary) depending 
-  the current shift offset.
-*)
 
 module Var = Always.Variable
 
@@ -88,14 +85,12 @@ let create scope (i : _ I.t) =
   let read = Var.wire ~default:gnd in
   let jpeg_ready = Var.wire ~default:gnd in
   let bits_valid = Var.wire ~default:gnd in
+  let update_state = Var.wire ~default:gnd in
   (* combinational shift register logic *)
   Always.(
     compile
-      [ shift_offset_next.next <-- uresize shift_offset.value 5 +: i.read_entropy_bits
-      ; shift_offset_next.reg <-- shift_offset_next.next.value
-      ; buffer.reg <-- buffer.next.value
-      ; one_byte_shifted.reg <-- one_byte_shifted.next.value
-      ; shift_offset <-- shift_offset_next.next.value.:[2, 0]
+      [ (* combinationally work out the next shift register state *)
+        shift_offset_next.next <-- uresize shift_offset.value 5 +: i.read_entropy_bits
       ; if_
           shift_offset_next.next.value.:(4)
           [ (* >= 16 *)
@@ -122,17 +117,36 @@ let create scope (i : _ I.t) =
                  ]
              ]
              []
-      ; sm.switch
+      ; (* Control updating the state based on validity of input data. *)
+        sm.switch
           [ ( Pass
             , [ bits_valid <-- vdd
               ; jpeg_ready <-- read.value
-              ; when_ read.value [ if_ i.jpeg_valid [] [ sm.set_next Load ] ]
+              ; if_
+                  read.value
+                  [ if_
+                      i.jpeg_valid
+                      [ update_state <-- vdd ]
+                      [ shift_offset_next.reg <-- shift_offset_next.next.value
+                      ; sm.set_next Load
+                      ]
+                  ]
+                  [ update_state <-- vdd ]
               ] )
           ; ( Load
             , [ jpeg_ready <-- vdd
               ; bits_valid <-- gnd
-              ; when_ i.jpeg_valid [ sm.set_next Pass ]
+              ; (* output the correct shift value given the previous amount to be shift by *)
+                shift_offset_next.next <-- shift_offset_next.reg.value
+              ; when_ i.jpeg_valid [ update_state <-- vdd; sm.set_next Pass ]
               ] )
+          ]
+      ; (* Perform the state update *)
+        when_
+          update_state.value
+          [ buffer.reg <-- buffer.next.value
+          ; one_byte_shifted.reg <-- one_byte_shifted.next.value
+          ; shift_offset <-- shift_offset_next.next.value.:[2, 0]
           ]
       ]);
   { O.bits = sel_top bits 16
