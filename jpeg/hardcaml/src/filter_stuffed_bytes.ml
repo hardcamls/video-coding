@@ -129,3 +129,8 @@ let create scope (i : _ I.t) =
       ]);
   O.Of_always.value o
 ;;
+
+let hierarchical scope =
+  let module Hier = Hierarchy.In_scope (I) (O) in
+  Hier.hierarchical ~scope ~name:"stuff" create
+;;

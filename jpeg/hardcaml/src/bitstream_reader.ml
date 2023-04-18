@@ -41,52 +41,6 @@ module O = struct
   [@@deriving sexp_of, hardcaml]
 end
 
-let or_0 s a = mux2 s a (zero (width a))
-
-(* We maintain a 48 bit internal buffer where upto 16 bits can be input and
-   output per cycle. Note that a 32 bit buffer doesn't work so well as it stalls
-   a lot. *)
-let create scope (i : _ I.t) =
-  let ( -- ) = Scope.naming scope in
-  (* Add and/or subtract bits from the buffer *)
-  let bits_available = Clocking.Var.reg i.clocking ~width:6 in
-  ignore (bits_available.value -- "num_bits_available" : Signal.t);
-  (* Bits are available at the output *)
-  let can_output_bits = bits_available.value >=:. 16 in
-  (* Space to read input bits *)
-  let can_input_bits = bits_available.value <=:. 32 in
-  (* space to read inputs bits and bits are available *)
-  let reading_bits_in = can_input_bits &: i.jpeg_valid in
-  let buffer = Clocking.Var.reg i.clocking ~width:48 in
-  ignore (buffer.value -- "bits_buffer" : Signal.t);
-  Always.(
-    compile
-      [ if_
-          i.header_or_entropy_mode
-          [ (* header mode *) bits_available <--. 0 ]
-          [ (* entropy mode *)
-            bits_available
-            <-- Uop.(
-                  bits_available.value
-                  -: or_0 can_output_bits i.read_entropy_bits
-                  +: or_0 reading_bits_in (of_int ~width:5 16)).:[5, 0]
-          ; when_ reading_bits_in [ buffer <-- i.jpeg_in @: buffer.value.:[47, 16] ]
-          ]
-      ]);
-  let bits_buffer_offset =
-    (of_int ~width:6 48 -: bits_available.value).:[5, 0] -- "bits_buffer_offset"
-  in
-  let bits =
-    mux bits_buffer_offset (List.init 33 ~f:(fun i -> (srl buffer.value i).:[15, 0]))
-  in
-  { O.bits; bits_valid = can_output_bits; jpeg_ready = can_input_bits }
-;;
-
-let hierarchical scope =
-  let module Hier = Hierarchy.In_scope (I) (O) in
-  Hier.hierarchical ~scope ~name:"reader" create
-;;
-
 (* Another way of thinking about this. 
    
   We have a 40 bit shift register formed of 5 bytes 
@@ -106,43 +60,48 @@ let hierarchical scope =
 
 module Var = Always.Variable
 
-let create_new scope (i : _ I.t) =
+let create scope (i : _ I.t) =
   let ( -- ) = Scope.naming scope in
   let vname (v : Var.t) name = ignore (v.value -- name : Signal.t) in
-  let bytes = Array.init 5 ~f:(fun _ -> Clocking.Var.reg i.clocking ~width:8) in
+  let buffer = Clocking.Var.reg i.clocking ~width:40 in
+  vname buffer "buffer";
   let shift_offset = Clocking.Var.reg i.clocking ~width:3 in
   vname shift_offset "shift_offset";
   let shift_offset_next =
     uresize shift_offset.value 5 +: i.read_entropy_bits -- "shift_offset_next"
   in
-  let bits =
-    log_shift
-      sll
-      (bytes.(0).value @: bytes.(1).value @: bytes.(2).value)
-      shift_offset.value
-  in
-  let shift_out_by_1_byte = Var.wire ~default:gnd in
-  vname shift_out_by_1_byte "shift_out_by_1_byte";
-  let shift_out_by_2_bytes = Var.wire ~default:gnd in
-  vname shift_out_by_2_bytes "shift_out_by_2_bytes";
-  let load_output_byte index =
-    Always.(
-      proc
-        [ when_ shift_out_by_1_byte.value [ bytes.(index) <-- bytes.(index + 1).value ]
-        ; when_ shift_out_by_2_bytes.value [ bytes.(index) <-- bytes.(index + 2).value ]
-        ])
-  in
-  (* Control output *)
+  let bits = log_shift sll (sel_top buffer.value 24) shift_offset.value in
+  let one_byte_shifted = Clocking.Var.reg i.clocking ~width:1 in
+  vname one_byte_shifted "one_byte_shifted";
+  let jpeg_ready = Var.wire ~default:gnd in
+  let _bits_valid = Var.wire ~default:gnd in
   Always.(
     compile
-      [ (* control shifting by 1 or 2 bytes into the output registers *)
-        proc (List.init 3 ~f:load_output_byte)
-      ; (* compute the next shift offset, and shift by bytes as appropriate *)
-        shift_offset <-- shift_offset_next.:[2, 0]
-      ; if_ shift_offset_next.:(4) [ shift_out_by_2_bytes <-- vdd ]
-        @@ elif shift_offset_next.:(3) [ shift_out_by_1_byte <-- vdd ] []
+      [ shift_offset <-- shift_offset_next.:[2, 0]
+      ; if_
+          shift_offset_next.:(4)
+          [ (* >= 16 *)
+            jpeg_ready <-- vdd
+          ; if_
+              one_byte_shifted.value
+              [ buffer <-- drop_bottom (drop_top buffer.value 16) 8 @: i.jpeg_in @: zero 8
+              ]
+              [ buffer <-- drop_top buffer.value 16 @: i.jpeg_in ]
+          ]
+        @@ elif
+             shift_offset_next.:(3)
+             [ (* >= 8 *)
+               if_
+                 one_byte_shifted.value
+                 [ buffer <-- drop_bottom (drop_top buffer.value 8) 8 @: i.jpeg_in
+                 ; one_byte_shifted <-- gnd
+                 ; jpeg_ready <-- vdd
+                 ]
+                 [ buffer <-- drop_top buffer.value 8 @: zero 8
+                 ; one_byte_shifted <-- vdd
+                 ]
+             ]
+             []
       ]);
-  (* Control input. *)
-  Always.(compile [ bytes.(3) <-- i.jpeg_in.:[15, 8]; bytes.(4) <-- i.jpeg_in.:[7, 0] ]);
-  { (O.Of_signal.of_int 0) with bits = bits.:-[None, 16] }
+  { O.bits = sel_top bits 16; bits_valid = gnd; jpeg_ready = jpeg_ready.value }
 ;;
