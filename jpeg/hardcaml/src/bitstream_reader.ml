@@ -28,6 +28,7 @@ open Signal
 module I = struct
   type 'a t =
     { clocking : 'a Clocking.t
+    ; start : 'a
     ; header_or_entropy_mode : 'a (** 1 for header mode, 0 for entropy mode *)
     ; read_header_byte : 'a
     ; read_entropy_bits : 'a [@bits 5]
@@ -53,6 +54,8 @@ module Var = Always.Variable
 
 module State = struct
   type t =
+    | Start
+    | Sync
     | Pass
     | Load
   [@@deriving sexp_of, compare, enumerate]
@@ -85,6 +88,7 @@ let create scope (i : _ I.t) =
   let jpeg_ready = Var.wire ~default:gnd in
   let bits_valid = Var.wire ~default:gnd in
   let update_state = Var.wire ~default:gnd in
+  let sync_count = Clocking.Var.reg i.clocking ~width:1 in
   (* combinational shift register logic *)
   Always.(
     compile
@@ -118,7 +122,25 @@ let create scope (i : _ I.t) =
              []
       ; (* Control updating the state based on validity of input data. *)
         sm.switch
-          [ ( Pass
+          [ ( Start
+            , [ sync_count <--. 0
+              ; shift_offset <--. 0
+              ; one_byte_shifted.reg <-- vdd
+              ; when_ i.start [ sm.set_next Sync ]
+              ] )
+          ; ( Sync
+            , [ jpeg_ready <-- vdd
+              ; when_
+                  i.jpeg_valid
+                  [ sync_count <-- sync_count.value +:. 1
+                  ; buffer.reg
+                    <-- drop_bottom (drop_top buffer.reg.value 16) 8
+                        @: i.jpeg_in
+                        @: zero 8
+                  ; when_ (sync_count.value ==:. 1) [ sm.set_next Pass ]
+                  ]
+              ] )
+          ; ( Pass
             , [ bits_valid <-- vdd
               ; jpeg_ready <-- read.value
               ; if_

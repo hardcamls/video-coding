@@ -65,6 +65,7 @@ let create scope (i : _ I.t) =
     (Bitstream_reader.hierarchical
        scope
        { Bitstream_reader.I.clocking = i.clocking
+       ; start = i.start
        ; header_or_entropy_mode = gnd
        ; read_header_byte = gnd
        ; read_entropy_bits = datapath.read_bits
