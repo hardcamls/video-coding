@@ -29,3 +29,4 @@ module O : sig
 end
 
 val create : Scope.t -> Interface.Create_fn(I)(O).t
+val hierarchical : Scope.t -> Interface.Create_fn(I)(O).t

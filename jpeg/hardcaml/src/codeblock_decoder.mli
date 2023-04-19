@@ -8,6 +8,7 @@ module I : sig
     ; start : 'a
     ; table_id : 'a
     ; bits : 'a
+    ; bits_valid : 'a
     ; dc_pred : 'a
     }
   [@@deriving sexp_of, hardcaml]

@@ -41,6 +41,7 @@ module Decoder = struct
         ; start = i.start
         ; table_id = i.table_id
         ; bits = reader.bits
+        ; bits_valid = vdd
         ; dc_pred = zero 12
         }
     in

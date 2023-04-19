@@ -10,6 +10,7 @@ module I = struct
     ; luma_or_chroma : 'a
     ; dc_pred_in : 'a [@bits 12]
     ; bits : 'a [@bits 16]
+    ; bits_valid : 'a
     ; pixel_read_address : 'a [@bits 6]
     ; pixel_read_enable : 'a
     }
@@ -143,6 +144,7 @@ let create scope (i : _ I.t) =
       ; start = i.start
       ; table_id = i.luma_or_chroma
       ; bits = i.bits
+      ; bits_valid = i.bits_valid
       ; dc_pred = i.dc_pred_in
       }
   in

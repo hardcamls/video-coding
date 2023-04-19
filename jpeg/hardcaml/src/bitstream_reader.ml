@@ -63,17 +63,16 @@ type reg_with_next =
   ; next : Var.t
   }
 
-let reg_with_next clocking ~name ~width =
-  let reg = Clocking.Var.reg clocking ~width in
-  let next = Var.wire ~default:reg.value in
-  ignore (reg.value -- name : Signal.t);
-  ignore (next.value -- (name ^ "_next") : Signal.t);
-  { reg; next }
-;;
-
 let create scope (i : _ I.t) =
   let ( -- ) = Scope.naming scope in
   let vname (v : Var.t) name = ignore (v.value -- name : Signal.t) in
+  let reg_with_next clocking ~name ~width =
+    let reg = Clocking.Var.reg clocking ~width in
+    let next = Var.wire ~default:reg.value in
+    ignore (reg.value -- name : Signal.t);
+    ignore (next.value -- (name ^ "_next") : Signal.t);
+    { reg; next }
+  in
   let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
   ignore (sm.current -- "STATE" : Signal.t);
   let buffer = reg_with_next i.clocking ~name:"buffer" ~width:40 in
@@ -153,4 +152,9 @@ let create scope (i : _ I.t) =
   ; bits_valid = bits_valid.value
   ; jpeg_ready = jpeg_ready.value
   }
+;;
+
+let hierarchical scope =
+  let module Hier = Hierarchy.In_scope (I) (O) in
+  Hier.hierarchical ~scope ~name:"bsread" create
 ;;

@@ -74,6 +74,28 @@ let command_decoder =
         Option.iter waves ~f:Hardcaml_waveterm_interactive.run]
 ;;
 
+let command_decoder_accelerator =
+  Command.basic
+    ~summary:"Decoder simulation"
+    [%map_open.Command
+      let jpeg = anon ("JPEG" %: string)
+      and _yuv = flag "-yuv" (optional string) ~doc:""
+      and _num_blocks_to_decode =
+        flag "-blocks" (optional int) ~doc:"Number of blocks to decode in simulation"
+      and _error_tolerance =
+        flag
+          "-error-tolerance"
+          (optional int)
+          ~doc:"Allowable error in reconstructed pixels compare to model reference"
+      in
+      fun () ->
+        let waves = Hardcaml_jpeg_test.Test_decoder_accelerator.test ~waves:true jpeg in
+        (* Option.iter yuv ~f:(fun yuv ->
+            Out_channel.with_file yuv ~f:(fun yuv ->
+                Hardcaml_jpeg_model.Frame.output ~out_channel:yuv frame)); *)
+        Option.iter waves ~f:Hardcaml_waveterm_interactive.run]
+;;
+
 let command =
   Command.group
     ~summary:"JPEG core simulations"
@@ -81,6 +103,7 @@ let command =
     ; "headers", command_decode_headers
     ; "codeblock", command_codeblock
     ; "decoder", command_decoder
+    ; "accelerator", command_decoder_accelerator
     ; "filter-stuffed-bytes", command_filter_stuffed_bytes
     ]
 ;;

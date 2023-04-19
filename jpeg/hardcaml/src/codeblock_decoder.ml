@@ -10,6 +10,7 @@ module I = struct
     ; start : 'a
     ; table_id : 'a
     ; bits : 'a [@bits 16]
+    ; bits_valid : 'a
     ; dc_pred : 'a [@bits 12]
     }
   [@@deriving sexp_of, hardcaml]

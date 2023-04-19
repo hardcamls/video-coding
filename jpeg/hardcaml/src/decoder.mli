@@ -8,6 +8,7 @@ module Core : sig
       ; start : 'a
       ; markers : 'a Decode_headers.All_markers.t
       ; bits : 'a
+      ; bits_valid : 'a
       ; pixel_read_address : 'a
       ; pixel_read_enable : 'a
       ; output_done : 'a

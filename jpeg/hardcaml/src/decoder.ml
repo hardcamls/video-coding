@@ -9,6 +9,7 @@ module Core = struct
       ; start : 'a
       ; markers : 'a Decode_headers.All_markers.t
       ; bits : 'a [@bits 16]
+      ; bits_valid : 'a
       ; pixel_read_address : 'a [@bits 6]
       ; pixel_read_enable : 'a
       ; output_done : 'a
@@ -37,6 +38,7 @@ module Core = struct
         ; luma_or_chroma = controller.luma_or_chroma
         ; dc_pred_in = controller.dc_pred_out
         ; bits = i.bits
+        ; bits_valid = i.bits_valid
         ; pixel_read_address = i.pixel_read_address
         ; pixel_read_enable = i.pixel_read_enable
         }

@@ -9,6 +9,7 @@ module I : sig
     ; luma_or_chroma : 'a
     ; dc_pred_in : 'a
     ; bits : 'a
+    ; bits_valid : 'a
     ; pixel_read_address : 'a
     ; pixel_read_enable : 'a
     }

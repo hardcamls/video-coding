@@ -21,6 +21,7 @@ module Decoder = struct
   end
 
   module O = Decoder.O
+  open Signal
 
   let create ~bits scope (i : _ I.t) =
     let reader = Reader.O.Of_signal.wires () in
@@ -31,6 +32,7 @@ module Decoder = struct
         ; start = i.start
         ; markers = i.markers
         ; bits = reader.bits
+        ; bits_valid = vdd
         ; pixel_read_address = i.pixel_read_address
         ; pixel_read_enable = i.pixel_read_enable
         ; output_done = i.output_done
