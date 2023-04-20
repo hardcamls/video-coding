@@ -178,3 +178,68 @@ let hierarchical scope =
   let module Hier = Hierarchy.In_scope (I) (O) in
   Hier.hierarchical ~scope ~name:"bsread" create
 ;;
+
+module Full = struct
+  module I = struct
+    type 'a t =
+      { clocking : 'a Clocking.t
+      ; start : 'a
+      ; header_or_entropy : 'a
+      ; read_byte : 'a
+      ; read_bits : 'a [@bits 5]
+            (** Advance the bitstream by 0 to 16 bits. Values > 16 lead to undefined
+              behaviour.*)
+      ; jpeg_in : 'a [@bits 16]
+            (** 32 bits of data from the bitstream provided to the reader. *)
+      ; jpeg_valid : 'a (** The next 16 bits of input bitstream are available *)
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  module O = struct
+    type 'a t =
+      { bits : 'a [@bits 16] (** The next 16 bits of the bitstream*)
+      ; bits_valid : 'a (** [bits] has 16 bits of data available *)
+      ; byte : 'a [@bits 8]
+      ; byte_valid : 'a
+      ; jpeg_ready : 'a (** Core reads the next 16 bits in *)
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  module State = struct
+    type t =
+      | Start
+      | Header_mode
+      | Entropy_mode
+      | Resync
+    [@@deriving sexp_of, compare, enumerate]
+  end
+
+  let _create _scope (i : _ I.t) =
+    let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
+    let byte_offset = Clocking.Var.reg i.clocking ~width:1 in
+    let byte_valid = Var.wire ~default:gnd in
+    let byte_out = Var.wire ~default:(zero 8) in
+    Always.(
+      compile
+        [ sm.switch
+            [ Start, [ byte_offset <-- gnd; when_ i.start [ sm.set_next Header_mode ] ]
+            ; ( Header_mode
+              , [ when_
+                    i.jpeg_valid
+                    [ byte_valid <-- vdd
+                    ; byte_out
+                      <-- mux2 byte_offset.value i.jpeg_in.:[7, 0] i.jpeg_in.:[15, 8]
+                    ]
+                ] )
+            ; ( Entropy_mode
+              , [ (* Track the input looking for the EOI marker.  
+                     When we see it, we will suppress the input to the entropy bits reader. *) ]
+              )
+            ; Resync, []
+            ]
+        ]);
+    O.Of_signal.of_int 0
+  ;;
+end
