@@ -59,11 +59,11 @@ let command_decoder =
           "-error-tolerance"
           (optional int)
           ~doc:"Allowable error in reconstructed pixels compare to model reference"
-      in
+      and waves = flag "-waves" no_arg ~doc:"Show waveform" in
       fun () ->
         let frame, waves =
           Hardcaml_jpeg_test.Test_decoder.test
-            ~waves:true
+            ~waves
             ?num_blocks_to_decode
             ?error_tolerance
             jpeg
@@ -79,20 +79,26 @@ let command_decoder_accelerator =
     ~summary:"Decoder simulation"
     [%map_open.Command
       let jpeg = anon ("JPEG" %: string)
-      and _yuv = flag "-yuv" (optional string) ~doc:""
-      and _num_blocks_to_decode =
+      and yuv = flag "-yuv" (optional string) ~doc:""
+      and num_blocks_to_decode =
         flag "-blocks" (optional int) ~doc:"Number of blocks to decode in simulation"
-      and _error_tolerance =
+      and error_tolerance =
         flag
           "-error-tolerance"
           (optional int)
           ~doc:"Allowable error in reconstructed pixels compare to model reference"
-      in
+      and waves = flag "-waves" no_arg ~doc:"Show waveform" in
       fun () ->
-        let waves = Hardcaml_jpeg_test.Test_decoder_accelerator.test ~waves:true jpeg in
-        (* Option.iter yuv ~f:(fun yuv ->
+        let frame, waves =
+          Hardcaml_jpeg_test.Test_decoder_accelerator.test
+            ~waves
+            ?num_blocks_to_decode
+            ?error_tolerance
+            jpeg
+        in
+        Option.iter yuv ~f:(fun yuv ->
             Out_channel.with_file yuv ~f:(fun yuv ->
-                Hardcaml_jpeg_model.Frame.output ~out_channel:yuv frame)); *)
+                Hardcaml_jpeg_model.Frame.output ~out_channel:yuv frame));
         Option.iter waves ~f:Hardcaml_waveterm_interactive.run]
 ;;
 

@@ -1,5 +1,5 @@
 open! Base
-open Hardcaml
+open! Hardcaml
 
 (* Kintex Ultrascale+ | ~220 Mhz | ~2.7K CLB LUTs  
    Spartan 7          | ~80 Mhz  | ~2.4K Slice LUTs
@@ -30,8 +30,6 @@ module O = struct
     }
   [@@deriving sexp_of, hardcaml]
 end
-
-open Signal
 
 let create scope (i : _ I.t) =
   let filter_stuffed_bytes = Filter_stuffed_bytes.O.Of_signal.wires () in
@@ -66,14 +64,13 @@ let create scope (i : _ I.t) =
        scope
        { Bitstream_reader.I.clocking = i.clocking
        ; start = i.start
-       ; header_or_entropy_mode = gnd
-       ; read_header_byte = gnd
-       ; read_entropy_bits = datapath.read_bits
+       ; read_bits = datapath.read_bits
        ; jpeg_in = filter_stuffed_bytes.o_data
        ; jpeg_valid = filter_stuffed_bytes.o_valid
        });
   { O.pixel = datapath.pixel
-  ; dc_pred_out = datapath.dc_pred_out
+  ; dc_pred_out =
+      Clocking.reg i.clocking ~enable:datapath.dc_pred_write datapath.dc_pred_out
   ; jpeg_ready = filter_stuffed_bytes.i_ready
   ; done_ = datapath.done_
   }

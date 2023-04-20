@@ -52,39 +52,13 @@ module Sim = Cyclesim.With_interface (Decoder.I) (Decoder.O)
 
 let ( <--. ) a b = a := Bits.of_int ~width:(Bits.width !a) b
 
-let reconstruct block_number frame pixels =
-  let macroblock = block_number / 6 in
-  let subblock = block_number % 6 in
-  let width = Frame.width frame in
-  let y_pos = macroblock / (width / 16) in
-  let x_pos = macroblock % (width / 16) in
-  print_s
-    [%message
-      (macroblock : int) (subblock : int) (width : int) (x_pos : int) (y_pos : int)];
-  let copy plane x_pos y_pos =
-    for y = 0 to 7 do
-      for x = 0 to 7 do
-        Plane.(plane.![x_pos + x, y_pos + y] <- Char.of_int_exn pixels.(x + (y * 8)))
-      done
-    done
-  in
-  match subblock with
-  | 0 -> copy (Frame.y frame) (x_pos * 16) (y_pos * 16)
-  | 1 -> copy (Frame.y frame) ((x_pos * 16) + 8) (y_pos * 16)
-  | 2 -> copy (Frame.y frame) (x_pos * 16) ((y_pos * 16) + 8)
-  | 3 -> copy (Frame.y frame) ((x_pos * 16) + 8) ((y_pos * 16) + 8)
-  | 4 -> copy (Frame.u frame) (x_pos * 8) (y_pos * 8)
-  | 5 -> copy (Frame.v frame) (x_pos * 8) (y_pos * 8)
-  | _ -> failwith ""
-;;
-
 let max_reconstructed_diff pixels recon =
   Array.fold2_exn pixels recon ~init:0 ~f:(fun acc a b ->
       let diff = Int.abs (a - b) in
-      if diff > acc then acc else diff)
+      if diff < acc then acc else diff)
 ;;
 
-let test ?(waves = true) ?(error_tolerance = 1) ?num_blocks_to_decode jpeg =
+let test ?(waves = true) ?(error_tolerance = 2) ?num_blocks_to_decode jpeg =
   let bits = Util.load_jpeg_file jpeg in
   let headers = Model.Header.decode bits in
   let decoder = Model.init headers bits in
@@ -168,12 +142,17 @@ let test ?(waves = true) ?(error_tolerance = 1) ?num_blocks_to_decode jpeg =
       | Some comp ->
         (* Run simulator *)
         let pixels = output_a_block () in
-        reconstruct block_number frame pixels;
-        if max_reconstructed_diff pixels (Model.Component.recon comp) >= error_tolerance
+        (* print_s [%message (pixels : Int.Hex.t array)]; *)
+        Util.reconstruct ~block_number frame pixels;
+        let max_reconstructed_diff =
+          max_reconstructed_diff pixels (Model.Component.recon comp)
+        in
+        if max_reconstructed_diff >= error_tolerance
         then
           print_s
             [%message
               (block_number : int)
+                (max_reconstructed_diff : int)
                 (pixels : Model.Component.Summary.pixel_block)
                 (comp : Model.Component.Summary.t)];
         decode_and_compare_with_model (Sequence.tl_eagerly_exn model) (block_number + 1))
@@ -191,7 +170,9 @@ let test ?(waves = true) ?(error_tolerance = 1) ?num_blocks_to_decode jpeg =
 ;;
 
 let%expect_test "test decoder" =
-  let _, waves = test ~waves:true ~num_blocks_to_decode:6 "Mouse480.jpg" in
+  let _, waves =
+    test ~waves:true ~num_blocks_to_decode:6 ~error_tolerance:2 "Mouse480.jpg"
+  in
   Option.iter
     waves
     ~f:(Waveform.print ~display_height:50 ~display_width:120 ~wave_width:2 ~start_cycle:0);

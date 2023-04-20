@@ -29,9 +29,7 @@ module I = struct
   type 'a t =
     { clocking : 'a Clocking.t
     ; start : 'a
-    ; header_or_entropy_mode : 'a (** 1 for header mode, 0 for entropy mode *)
-    ; read_header_byte : 'a
-    ; read_entropy_bits : 'a [@bits 5]
+    ; read_bits : 'a [@bits 5]
           (** Advance the bitstream by 0 to 16 bits. Values > 16 lead to undefined
               behaviour.*)
     ; jpeg_in : 'a [@bits 16]
@@ -93,7 +91,7 @@ let create scope (i : _ I.t) =
   Always.(
     compile
       [ (* combinationally work out the next shift register state *)
-        shift_offset_next.next <-- uresize shift_offset.value 5 +: i.read_entropy_bits
+        shift_offset_next.next <-- uresize shift_offset.value 5 +: i.read_bits
       ; if_
           shift_offset_next.next.value.:(4)
           [ (* >= 16 *)

@@ -74,3 +74,5 @@ val load_quant_tables
   -> Bits.t ref Hardcaml_jpeg.Markers.Dqt.Fields.t
   -> Hardcaml_jpeg_model.Markers.Dqt.t list
   -> unit
+
+val reconstruct : block_number:int -> Hardcaml_jpeg_model.Frame.t -> int array -> unit

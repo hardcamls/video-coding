@@ -11,9 +11,7 @@ module I : sig
   type 'a t =
     { clocking : 'a Clocking.t
     ; start : 'a
-    ; header_or_entropy_mode : 'a
-    ; read_header_byte : 'a
-    ; read_entropy_bits : 'a
+    ; read_bits : 'a
     ; jpeg_in : 'a
     ; jpeg_valid : 'a
     }

@@ -337,8 +337,8 @@ module Transform = struct
       (match !Cfg.show_plane with
       | All -> ()
       | Y -> loop (fun oy _ou _ov -> f.{oy}, 128, 128)
-      | U -> loop (fun _oy ou _ov -> 256, f.{ou}, 128)
-      | V -> loop (fun _oy _ou ov -> 256, 128, f.{ov}));
+      | U -> loop (fun _oy ou _ov -> 128, f.{ou}, 128)
+      | V -> loop (fun _oy _ou ov -> 128, 128, f.{ov}));
       t
   ;;
 

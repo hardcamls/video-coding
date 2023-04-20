@@ -32,15 +32,15 @@ let test () =
   while not (Bits.to_bool !(outputs.bits_valid)) do
     cycle ()
   done;
-  inputs.read_entropy_bits := Bits.of_int ~width:5 16;
+  inputs.read_bits := Bits.of_int ~width:5 16;
   cycle ();
-  inputs.read_entropy_bits := Bits.of_int ~width:5 8;
+  inputs.read_bits := Bits.of_int ~width:5 8;
   cycle ();
-  inputs.read_entropy_bits := Bits.of_int ~width:5 16;
+  inputs.read_bits := Bits.of_int ~width:5 16;
   cycle ();
-  inputs.read_entropy_bits := Bits.of_int ~width:5 8;
+  inputs.read_bits := Bits.of_int ~width:5 8;
   cycle ();
-  inputs.read_entropy_bits := Bits.of_int ~width:5 16;
+  inputs.read_bits := Bits.of_int ~width:5 16;
   cycle ();
   waves
 ;;
@@ -61,7 +61,7 @@ let%expect_test "buffer" =
     │jpeg_valid        ││────────────────────────────────────────────────                                                  │
     │                  ││                                                                                                  │
     │                  ││────────┬───────┬───────┬───────┬───────┬───────                                                  │
-    │read_entropy_bits ││ 00     │10     │08     │10     │08     │10                                                       │
+    │read_bits         ││ 00     │10     │08     │10     │08     │10                                                       │
     │                  ││────────┴───────┴───────┴───────┴───────┴───────                                                  │
     │start             ││                                                                                                  │
     │                  ││────────────────────────────────────────────────                                                  │
@@ -149,7 +149,7 @@ let test ?(waves = false) data bits =
             (bits : int) (cbits : Int.Hex.t) (obits : Int.Hex.t) (hbits : Int.Hex.t)])
   in
   Array.iter bits ~f:(fun bits ->
-      inputs.read_entropy_bits := Bits.of_int ~width:5 bits;
+      inputs.read_bits := Bits.of_int ~width:5 bits;
       cycle ();
       check bits);
   waves
@@ -175,7 +175,7 @@ let%expect_test "..." =
     │jpeg_valid        ││            ┌───────────────────────────────────────────────────────────                          │
     │                  ││────────────┘                                                                                     │
     │                  ││────────────────────────┬─────┬─────┬─────┬─────┬─────┬───────────┬─────                          │
-    │read_entropy_bits ││ 00                     │02   │03   │07   │0C   │0D   │01         │09                             │
+    │read_bits         ││ 00                     │02   │03   │07   │0C   │0D   │01         │09                             │
     │                  ││────────────────────────┴─────┴─────┴─────┴─────┴─────┴───────────┴─────                          │
     │start             ││      ┌─────┐                                                                                     │
     │                  ││──────┘     └───────────────────────────────────────────────────────────                          │
@@ -210,6 +210,5 @@ let%expect_test "..." =
   let data = Array.init 10000 ~f:(fun _ -> Random.int (1 lsl 16)) in
   let bits = Array.init 10000 ~f:(fun _ -> Random.int 17) in
   ignore (test ~waves:false data bits : Waveform.t option);
-  [%expect
-    {| |}]
+  [%expect {| |}]
 ;;

@@ -216,3 +216,29 @@ let load_quant_tables
       done;
       dqt.element_write := Bits.gnd)
 ;;
+
+let reconstruct ~block_number frame pixels =
+  let macroblock = block_number / 6 in
+  let subblock = block_number % 6 in
+  let width = Frame.width frame in
+  let y_pos = macroblock / (width / 16) in
+  let x_pos = macroblock % (width / 16) in
+  print_s
+    [%message
+      (macroblock : int) (subblock : int) (width : int) (x_pos : int) (y_pos : int)];
+  let copy plane x_pos y_pos =
+    for y = 0 to 7 do
+      for x = 0 to 7 do
+        Plane.(plane.![x_pos + x, y_pos + y] <- Char.of_int_exn pixels.(x + (y * 8)))
+      done
+    done
+  in
+  match subblock with
+  | 0 -> copy (Frame.y frame) (x_pos * 16) (y_pos * 16)
+  | 1 -> copy (Frame.y frame) ((x_pos * 16) + 8) (y_pos * 16)
+  | 2 -> copy (Frame.y frame) (x_pos * 16) ((y_pos * 16) + 8)
+  | 3 -> copy (Frame.y frame) ((x_pos * 16) + 8) ((y_pos * 16) + 8)
+  | 4 -> copy (Frame.u frame) (x_pos * 8) (y_pos * 8)
+  | 5 -> copy (Frame.v frame) (x_pos * 8) (y_pos * 8)
+  | _ -> failwith ""
+;;

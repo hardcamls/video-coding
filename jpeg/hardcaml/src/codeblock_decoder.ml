@@ -179,34 +179,46 @@ let create scope (i : _ I.t) =
                   ]
               ] )
           ; ( Dc
-            , [ size <-- dc.data.:[3, 0]
-              ; sm.set_next Dc_size
-              ; on_error ~:(dc.matches) errors.dc_coef_decode
+            , [ when_
+                  i.bits_valid
+                  [ size <-- dc.data.:[3, 0]
+                  ; sm.set_next Dc_size
+                  ; on_error ~:(dc.matches) errors.dc_coef_decode
+                  ]
               ] )
-          ; Dc_size, [ coef_count <-- coef_count_next; sm.set_next Ac ]
+          ; ( Dc_size
+            , [ when_ i.bits_valid [ coef_count <-- coef_count_next; sm.set_next Ac ] ] )
           ; ( Ac
-            , [ run <-- uresize ac_run 7
-              ; size <-- ac.data.:[3, 0]
-              ; sm.set_next Ac_size
-              ; when_
-                  ac_run_and_size_is_zero
-                  [ run <-- of_int ~width:7 63 -: coef_count.value; sm.set_next Ac_size ]
-              ; on_error ~:(ac.matches) errors.ac_coef_decode
+            , [ when_
+                  i.bits_valid
+                  [ run <-- uresize ac_run 7
+                  ; size <-- ac.data.:[3, 0]
+                  ; sm.set_next Ac_size
+                  ; when_
+                      ac_run_and_size_is_zero
+                      [ run <-- of_int ~width:7 63 -: coef_count.value
+                      ; sm.set_next Ac_size
+                      ]
+                  ; on_error ~:(ac.matches) errors.ac_coef_decode
+                  ]
               ] )
           ; ( Ac_size
-            , [ run <-- run.value -:. 1
-              ; coef_count <-- coef_count_next
-              ; when_
-                  run_is_zero
-                  [ sm.set_next Ac
-                  ; when_ (coef_count.value ==:. 63) [ sm.set_next Start ]
-                  ; on_error (coef_count.value >=:. 64) errors.too_many_ac_coefs
+            , [ when_
+                  i.bits_valid
+                  [ run <-- run.value -:. 1
+                  ; coef_count <-- coef_count_next
+                  ; when_
+                      run_is_zero
+                      [ sm.set_next Ac
+                      ; when_ (coef_count.value ==:. 63) [ sm.set_next Start ]
+                      ; on_error (coef_count.value >=:. 64) errors.too_many_ac_coefs
+                      ]
                   ]
               ] )
           ]
       ]);
-  let write_dc_pred = sm.is Dc_size in
-  let write_idct_coef = write_dc_pred |: sm.is Ac_size in
+  let write_dc_pred = sm.is Dc_size &: i.bits_valid in
+  let write_idct_coef = write_dc_pred |: sm.is Ac_size &: i.bits_valid in
   let magnitude =
     let mag = decode_magnitude size.value i.bits in
     mux2 write_dc_pred (mag +: i.dc_pred) mag
@@ -215,11 +227,11 @@ let create scope (i : _ I.t) =
   ; read_bits =
       priority_select_with_default
         ~default:(zero 5)
-        [ { valid = sm.is Dc; value = dc.bits }
-        ; { valid = sm.is Dc_size |: (sm.is Ac_size &: run_is_zero)
+        [ { valid = sm.is Dc &: i.bits_valid; value = dc.bits }
+        ; { valid = sm.is Dc_size |: (sm.is Ac_size &: run_is_zero) &: i.bits_valid
           ; value = uresize size.value 5
           }
-        ; { valid = sm.is Ac; value = ac.bits }
+        ; { valid = sm.is Ac &: i.bits_valid; value = ac.bits }
         ]
   ; idct_coefs =
       { Idct_coefs.coef = mux2 (sm.is Ac_size &: ~:run_is_zero) (zero 12) magnitude
