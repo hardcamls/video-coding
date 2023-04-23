@@ -22,6 +22,8 @@ let read_header (outputs : _ Decoder.O.t) =
   let components = ref [] in
   let scan_selector = ref [] in
   let quant_tables = ref [] in
+  let code_words = ref [] in
+  let code_data = ref [] in
   let cycle () =
     let sof = outputs.markers.sof in
     if Bits.to_bool !(sof.component_write)
@@ -38,7 +40,20 @@ let read_header (outputs : _ Decoder.O.t) =
         := ( unref dqt.fields.table_identifier
            , unref dqt.element_address
            , unref dqt.element )
-           :: !quant_tables
+           :: !quant_tables;
+    let dht = outputs.markers.dht in
+    if Bits.to_bool !(dht.code.code_write)
+    then
+      code_words
+        := ( Markers.Dht.Header.Fields.map dht.header ~f:unref
+           , Markers.Dht.Code.map dht.code ~f:unref )
+           :: !code_words;
+    if Bits.to_bool !(dht.code_data.data_write)
+    then
+      code_data
+        := ( Markers.Dht.Header.Fields.map dht.header ~f:unref
+           , Markers.Dht.Code_data.map dht.code_data ~f:unref )
+           :: !code_data
   in
   let print () =
     let sof =
@@ -53,8 +68,68 @@ let read_header (outputs : _ Decoder.O.t) =
     in
     let scan_selector = List.rev !scan_selector in
     let quant_tables =
-      List.group !quant_tables ~break:(fun (a, _, _) (b, _, _) -> a <> b)
-      |> List.map ~f:(List.sort ~compare:[%compare: int * int * int])
+      let q =
+        List.group !quant_tables ~break:(fun (a, _, _) (b, _, _) -> a <> b)
+        |> List.map ~f:(List.sort ~compare:[%compare: int * int * int])
+      in
+      List.map q ~f:(fun l ->
+          match l with
+          | [] -> failwith ""
+          | (idx, _, _) :: _ ->
+            let a = Array.create ~len:64 0 in
+            List.iter l ~f:(fun (_, i, q) -> a.(i) <- q);
+            idx, a)
+    in
+    let code_words =
+      let c =
+        List.group !code_words ~break:(fun (hdr0, _) (hdr1, _) ->
+            not
+              ([%compare.equal: int * int]
+                 (hdr0.table_class, hdr0.destination_identifier)
+                 (hdr1.table_class, hdr1.destination_identifier)))
+        |> List.map
+             ~f:
+               (List.sort ~compare:(fun (_, (a : _ Markers.Dht.Code.t)) (_, b) ->
+                    Int.compare a.code_length_minus1 b.code_length_minus1))
+      in
+      List.map c ~f:(fun l ->
+          match l with
+          | [] -> failwith ""
+          | (hdr, _) :: _ -> hdr, List.map l ~f:(fun (_, data) -> data))
+    in
+    let code_data =
+      let c =
+        List.group !code_data ~break:(fun (hdr0, _) (hdr1, _) ->
+            not
+              ([%compare.equal: int * int]
+                 (hdr0.table_class, hdr0.destination_identifier)
+                 (hdr1.table_class, hdr1.destination_identifier)))
+        |> List.map
+             ~f:
+               (List.sort ~compare:(fun (_, (a : _ Markers.Dht.Code_data.t)) (_, b) ->
+                    Int.compare a.data_address b.data_address))
+      in
+      List.map c ~f:(fun l ->
+          match l with
+          | [] -> failwith ""
+          | (hdr, _) :: _ -> hdr, List.map l ~f:(fun (_, data) -> data))
+    in
+    let sexp_of_dht_header (t : _ Markers.Dht.Header.Fields.t) =
+      let class_ = t.table_class in
+      let destid = t.destination_identifier in
+      [%message (class_ : int) (destid : int)]
+    in
+    let sexp_of_code_data (t : _ Markers.Dht.Code_data.t) =
+      let address = t.data_address in
+      let data = t.data in
+      [%message (address : int) (data : int)]
+    in
+    let sexp_of_code (t : _ Markers.Dht.Code.t) =
+      let length = t.code_length_minus1 + 1 in
+      let num_codes = t.num_codes_at_length in
+      let base_address = t.code_base_address in
+      let code = t.code in
+      [%message (length : int) (num_codes : int) (base_address : int) (code : int)]
     in
     print_s
       [%message
@@ -64,7 +139,9 @@ let read_header (outputs : _ Decoder.O.t) =
           (sos_header : int Markers.Sos.Header.Fields.t)
           (scan_selector : int Markers.Scan_selector.Fields.t list)
           (sos_footer : int Markers.Sos.Footer.Fields.t)
-          (quant_tables : (int * int * int) list list)]
+          (quant_tables : (int * int array) list)
+          (code_words : (dht_header * code list) list)
+          (code_data : (dht_header * code_data list) list)]
   in
   cycle, print
 ;;
@@ -152,27 +229,106 @@ let%expect_test "test reader" =
        (successive_approximation_bit_high 0)
        (successive_approximation_bit_low 0)))
      (quant_tables
-      (((1 0 43) (1 1 43) (1 2 45) (1 3 45) (1 4 60) (1 5 53) (1 6 60) (1 7 118)
-        (1 8 65) (1 9 65) (1 10 118) (1 11 248) (1 12 165) (1 13 140) (1 14 165)
-        (1 15 248) (1 16 248) (1 17 248) (1 18 248) (1 19 248) (1 20 248)
-        (1 21 248) (1 22 248) (1 23 248) (1 24 248) (1 25 248) (1 26 248)
-        (1 27 248) (1 28 248) (1 29 248) (1 30 248) (1 31 248) (1 32 248)
-        (1 33 248) (1 34 248) (1 35 248) (1 36 248) (1 37 248) (1 38 248)
-        (1 39 248) (1 40 248) (1 41 248) (1 42 248) (1 43 248) (1 44 248)
-        (1 45 248) (1 46 248) (1 47 248) (1 48 248) (1 49 248) (1 50 248)
-        (1 51 248) (1 52 248) (1 53 248) (1 54 248) (1 55 248) (1 56 248)
-        (1 57 248) (1 58 248) (1 59 248) (1 60 248) (1 61 248) (1 62 248)
-        (1 63 248))
-       ((0 0 40) (0 1 40) (0 2 28) (0 3 30) (0 4 35) (0 5 30) (0 6 25) (0 7 40)
-        (0 8 35) (0 9 33) (0 10 35) (0 11 45) (0 12 43) (0 13 40) (0 14 48)
-        (0 15 60) (0 16 100) (0 17 65) (0 18 60) (0 19 55) (0 20 55) (0 21 60)
-        (0 22 123) (0 23 88) (0 24 93) (0 25 73) (0 26 100) (0 27 145) (0 28 128)
-        (0 29 153) (0 30 150) (0 31 143) (0 32 128) (0 33 140) (0 34 138)
-        (0 35 160) (0 36 180) (0 37 230) (0 38 195) (0 39 160) (0 40 170)
-        (0 41 218) (0 42 173) (0 43 138) (0 44 140) (0 45 200) (0 46 255)
-        (0 47 203) (0 48 218) (0 49 238) (0 50 245) (0 51 255) (0 52 255)
-        (0 53 255) (0 54 155) (0 55 193) (0 56 255) (0 57 255) (0 58 255)
-        (0 59 250) (0 60 255) (0 61 230) (0 62 253) (0 63 255)))))
+      ((1
+        (43 43 45 45 60 53 60 118 65 65 118 248 165 140 165 248 248 248 248 248
+         248 248 248 248 248 248 248 248 248 248 248 248 248 248 248 248 248 248
+         248 248 248 248 248 248 248 248 248 248 248 248 248 248 248 248 248 248
+         248 248 248 248 248 248 248 248))
+       (0
+        (40 40 28 30 35 30 25 40 35 33 35 45 43 40 48 60 100 65 60 55 55 60 123
+         88 93 73 100 145 128 153 150 143 128 140 138 160 180 230 195 160 170 218
+         173 138 140 200 255 203 218 238 245 255 255 255 155 193 255 255 255 250
+         255 230 253 255))))
+     (code_words
+      ((((class_ 1) (destid 1))
+        (((length 1) (num_codes 1) (base_address 0) (code 0))
+         ((length 2) (num_codes 1) (base_address 1) (code 2))
+         ((length 3) (num_codes 1) (base_address 2) (code 6))
+         ((length 4) (num_codes 1) (base_address 3) (code 14))
+         ((length 5) (num_codes 0) (base_address 3) (code 28))
+         ((length 6) (num_codes 0) (base_address 3) (code 56))
+         ((length 7) (num_codes 0) (base_address 3) (code 112))
+         ((length 8) (num_codes 0) (base_address 3) (code 224))
+         ((length 9) (num_codes 0) (base_address 3) (code 448))
+         ((length 10) (num_codes 0) (base_address 3) (code 896))
+         ((length 11) (num_codes 0) (base_address 3) (code 1792))
+         ((length 12) (num_codes 0) (base_address 3) (code 3584))
+         ((length 13) (num_codes 0) (base_address 3) (code 7168))
+         ((length 14) (num_codes 0) (base_address 3) (code 14336))
+         ((length 15) (num_codes 0) (base_address 3) (code 28672))
+         ((length 16) (num_codes 0) (base_address 3) (code 57344))))
+       (((class_ 0) (destid 1))
+        (((length 1) (num_codes 1) (base_address 0) (code 0))
+         ((length 2) (num_codes 1) (base_address 1) (code 2))
+         ((length 3) (num_codes 1) (base_address 2) (code 6))
+         ((length 4) (num_codes 1) (base_address 3) (code 14))
+         ((length 5) (num_codes 0) (base_address 3) (code 28))
+         ((length 6) (num_codes 0) (base_address 3) (code 56))
+         ((length 7) (num_codes 0) (base_address 3) (code 112))
+         ((length 8) (num_codes 0) (base_address 3) (code 224))
+         ((length 9) (num_codes 0) (base_address 3) (code 448))
+         ((length 10) (num_codes 0) (base_address 3) (code 896))
+         ((length 11) (num_codes 0) (base_address 3) (code 1792))
+         ((length 12) (num_codes 0) (base_address 3) (code 3584))
+         ((length 13) (num_codes 0) (base_address 3) (code 7168))
+         ((length 14) (num_codes 0) (base_address 3) (code 14336))
+         ((length 15) (num_codes 0) (base_address 3) (code 28672))
+         ((length 16) (num_codes 0) (base_address 3) (code 57344))))
+       (((class_ 1) (destid 0))
+        (((length 1) (num_codes 0) (base_address 0) (code 0))
+         ((length 2) (num_codes 0) (base_address 0) (code 0))
+         ((length 3) (num_codes 2) (base_address 2) (code 4))
+         ((length 4) (num_codes 2) (base_address 4) (code 12))
+         ((length 5) (num_codes 1) (base_address 5) (code 26))
+         ((length 6) (num_codes 4) (base_address 9) (code 60))
+         ((length 7) (num_codes 1) (base_address 10) (code 122))
+         ((length 8) (num_codes 4) (base_address 14) (code 252))
+         ((length 9) (num_codes 2) (base_address 16) (code 508))
+         ((length 10) (num_codes 1) (base_address 17) (code 1018))
+         ((length 11) (num_codes 4) (base_address 21) (code 2044))
+         ((length 12) (num_codes 3) (base_address 24) (code 4094))
+         ((length 13) (num_codes 1) (base_address 25) (code 8190))
+         ((length 14) (num_codes 1) (base_address 26) (code 16382))
+         ((length 15) (num_codes 0) (base_address 26) (code 32764))
+         ((length 16) (num_codes 0) (base_address 26) (code 65528))))
+       (((class_ 0) (destid 0))
+        (((length 1) (num_codes 0) (base_address 0) (code 0))
+         ((length 2) (num_codes 0) (base_address 0) (code 0))
+         ((length 3) (num_codes 3) (base_address 3) (code 6))
+         ((length 4) (num_codes 1) (base_address 4) (code 14))
+         ((length 5) (num_codes 1) (base_address 5) (code 30))
+         ((length 6) (num_codes 1) (base_address 6) (code 62))
+         ((length 7) (num_codes 1) (base_address 7) (code 126))
+         ((length 8) (num_codes 0) (base_address 7) (code 252))
+         ((length 9) (num_codes 0) (base_address 7) (code 504))
+         ((length 10) (num_codes 0) (base_address 7) (code 1008))
+         ((length 11) (num_codes 0) (base_address 7) (code 2016))
+         ((length 12) (num_codes 0) (base_address 7) (code 4032))
+         ((length 13) (num_codes 0) (base_address 7) (code 8064))
+         ((length 14) (num_codes 0) (base_address 7) (code 16128))
+         ((length 15) (num_codes 0) (base_address 7) (code 32256))
+         ((length 16) (num_codes 0) (base_address 7) (code 64512))))))
+     (code_data
+      ((((class_ 1) (destid 1))
+        (((address 0) (data 0)) ((address 1) (data 0)) ((address 2) (data 17))))
+       (((class_ 0) (destid 1))
+        (((address 0) (data 0)) ((address 1) (data 0)) ((address 2) (data 1))))
+       (((class_ 1) (destid 0))
+        (((address 0) (data 0)) ((address 1) (data 0)) ((address 2) (data 1))
+         ((address 3) (data 2)) ((address 4) (data 17)) ((address 5) (data 33))
+         ((address 6) (data 3)) ((address 7) (data 18)) ((address 8) (data 49))
+         ((address 9) (data 65)) ((address 10) (data 81)) ((address 11) (data 4))
+         ((address 12) (data 19)) ((address 13) (data 34))
+         ((address 14) (data 97)) ((address 15) (data 50))
+         ((address 16) (data 113)) ((address 17) (data 129))
+         ((address 18) (data 5)) ((address 19) (data 35))
+         ((address 20) (data 66)) ((address 21) (data 145))
+         ((address 22) (data 20)) ((address 23) (data 51))
+         ((address 24) (data 82)) ((address 25) (data 161))))
+       (((class_ 0) (destid 0))
+        (((address 0) (data 0)) ((address 1) (data 0)) ((address 2) (data 1))
+         ((address 3) (data 2)) ((address 4) (data 3)) ((address 5) (data 4))
+         ((address 6) (data 5)))))))
     ┌Signals───────────┐┌Waves─────────────────────────────────────────────────────────────────────────┐
     │clock             ││╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥│
     │                  ││╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨│
