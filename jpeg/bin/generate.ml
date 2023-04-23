@@ -16,4 +16,26 @@ let command_jpeg_decoder_accelerator =
           (Circ.create_exn ~name:"decoder_accelerator" (Accl.create scope))]
 ;;
 
-let () = Command_unix.run command_jpeg_decoder_accelerator
+let command_bytestream_reader =
+  Command.basic
+    ~summary:"Generate RTL for byte stream decoder"
+    [%map_open.Command
+      let () = return () in
+      fun () ->
+        let module Reader = Hardcaml_jpeg.Bytestream_decoder in
+        let module Circ = Circuit.With_interface (Reader.I) (Reader.O) in
+        let scope = Scope.create () in
+        Rtl.print
+          Verilog
+          ~database:(Scope.circuit_database scope)
+          (Circ.create_exn ~name:"bytestream_decoder" (Reader.create scope))]
+;;
+
+let () =
+  Command_unix.run
+    (Command.group
+       ~summary:""
+       [ "accelerator", command_jpeg_decoder_accelerator
+       ; "bytestream-reader", command_bytestream_reader
+       ])
+;;

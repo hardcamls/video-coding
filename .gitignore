@@ -3,3 +3,5 @@ _build
 tmp.log 
 *.yuv
 *.swp
+vivado.jou
+vivado.log
