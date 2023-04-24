@@ -17,16 +17,7 @@ module I = struct
     ; jpeg : 'a [@bits 8]
     ; jpeg_valid : 'a
     ; bits_ready : 'a
-    }
-  [@@deriving sexp_of, hardcaml]
-end
-
-module All_markers = struct
-  type 'a t =
-    { sof : 'a Markers.Sof.Fields.t [@rtlprefix "sof$"]
-    ; sos : 'a Markers.Sos.Fields.t [@rtlprefix "sos$"]
-    ; dqt : 'a Markers.Dqt.Fields.t [@rtlprefix "dqt$"]
-    ; dht : 'a Markers.Dht.Fields.t [@rtlprefix "dht$"]
+    ; decoder_done : 'a
     }
   [@@deriving sexp_of, hardcaml]
 end
@@ -37,7 +28,8 @@ module O = struct
     ; done_ : 'a
     ; bits : 'a [@bits 8]
     ; bits_valid : 'a
-    ; markers : 'a All_markers.t
+    ; markers : 'a Markers.All.t
+    ; decoder_start : 'a
     }
   [@@deriving sexp_of, hardcaml]
 end
@@ -86,6 +78,7 @@ let create scope (i : _ I.t) =
   let skip_count_next = skip_count.value +:. 1 in
   ignore (skip_count.value -- "SKIP_COUNT" : Signal.t);
   ignore (sm.current -- "STATE" : Signal.t);
+  let decoder_start = Var.wire ~default:gnd in
   Always.(
     compile
       [ start_dht <-- gnd
@@ -126,7 +119,10 @@ let create scope (i : _ I.t) =
                   [ sm.set_next Scan_for_marker
                   ; when_
                       start_ecs.value
-                      [ start_ecs <-- gnd; sm.set_next Entropy_coded_segment ]
+                      [ start_ecs <-- gnd
+                      ; decoder_start <-- vdd
+                      ; sm.set_next Entropy_coded_segment
+                      ]
                   ]
               ] )
           ; ( Skip_length
@@ -156,19 +152,21 @@ let create scope (i : _ I.t) =
                   ]
               ] )
           ; ( Entropy_coded_segment
-            , [ jpeg_ready <-- vdd
-              ; bits_valid <-- i.jpeg_valid
+            , [ jpeg_ready <-- gnd
               ; when_
-                  (i.jpeg_valid &: i.bits_ready &: (i.jpeg ==:. 0xff))
-                  [ sm.set_next Entropy_marker ]
+                  (i.jpeg_valid &: i.bits_ready)
+                  [ jpeg_ready <-- vdd
+                  ; bits_valid <-- i.jpeg_valid
+                  ; when_ (i.jpeg ==:. 0xff) [ sm.set_next Entropy_marker ]
+                  ]
               ] )
           ; ( Entropy_marker
             , [ jpeg_ready <-- vdd
-              ; bits_valid <-- vdd
               ; when_
-                  i.jpeg_valid
-                  [ sm.set_next Entropy_coded_segment
-                  ; when_ (i.jpeg ==:. M.eoi &: i.bits_ready) [ sm.set_next End_of_image ]
+                  (i.jpeg_valid &: i.bits_ready)
+                  [ bits_valid <-- vdd
+                  ; sm.set_next Entropy_coded_segment
+                  ; when_ (i.jpeg ==:. M.eoi) [ sm.set_next End_of_image ]
                   ; when_ (i.jpeg ==:. 0x0) [ bits_valid <-- gnd ]
                   ]
               ] )
@@ -215,7 +213,74 @@ let create scope (i : _ I.t) =
       dht.read_bits |: dqt.read_bits |: sof.read_bits |: sos.read_bits |: jpeg_ready.value
   ; done_ = sm.is Start
   ; markers = { dht = dht.fields; dqt = dqt.fields; sof = sof.fields; sos = sos.fields }
-  ; bits = zero 8
+  ; bits = i.jpeg
   ; bits_valid = bits_valid.value
+  ; decoder_start = decoder_start.value
   }
 ;;
+
+let hierarchical scope =
+  let module Hier = Hierarchy.In_scope (I) (O) in
+  Hier.hierarchical ~scope ~name:"bytedec" create
+;;
+
+module With_fifo16 = struct
+  module O' = O
+  module I = I
+
+  module O = struct
+    type 'a t =
+      { jpeg_ready : 'a
+      ; done_ : 'a
+      ; bits : 'a [@bits 16]
+      ; bits_valid : 'a
+      ; markers : 'a Markers.All.t
+      ; decoder_start : 'a
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  let widen ~clocking ~d ~wr =
+    let toggle = Clocking.reg_fb clocking ~enable:wr ~width:1 ~f:(fun d -> ~:d) in
+    let d_prev = Clocking.reg clocking ~enable:wr d in
+    d_prev @: d, wr &: toggle
+  ;;
+
+  let create ~capacity_in_bytes scope (i : _ I.t) =
+    let bytestream = O'.Of_signal.wires () in
+    let not_full = wire 1 in
+    let fifo =
+      let d, wr =
+        widen
+          ~clocking:i.clocking
+          ~d:bytestream.bits
+          ~wr:(bytestream.bits_valid &: not_full)
+      in
+      Fifo.create_showahead_with_extra_reg
+        ~scope
+        ~overflow_check:true
+        ~underflow_check:true
+        ()
+        ~capacity:(capacity_in_bytes / 2)
+        ~clock:i.clocking.clock
+        ~clear:i.clocking.clear
+        ~wr
+        ~d
+        ~rd:i.bits_ready
+    in
+    O'.Of_signal.assign bytestream (create scope { i with bits_ready = not_full });
+    not_full <== ~:(fifo.full);
+    { O.jpeg_ready = bytestream.jpeg_ready
+    ; done_ = bytestream.done_
+    ; bits = fifo.q
+    ; bits_valid = ~:(fifo.empty)
+    ; markers = bytestream.markers
+    ; decoder_start = bytestream.decoder_start
+    }
+  ;;
+
+  let hierarchical ~capacity_in_bytes scope =
+    let module Hier = Hierarchy.In_scope (I) (O) in
+    Hier.hierarchical ~scope ~name:"fbytedec" (create ~capacity_in_bytes)
+  ;;
+end

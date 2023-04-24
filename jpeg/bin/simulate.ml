@@ -1,16 +1,6 @@
 (* JPEG core simulations *)
 open Core
 
-let command_decode_headers =
-  Command.basic
-    ~summary:"Header decoding simulation"
-    [%map_open.Command
-      let jpeg = anon ("JPEG" %: string) in
-      fun () ->
-        let waves = Hardcaml_jpeg_test.Test_decode_headers.test jpeg in
-        Option.iter waves ~f:Hardcaml_waveterm_interactive.run]
-;;
-
 let command_codeblock =
   Command.basic
     ~summary:"Codeblock simulation"
@@ -106,7 +96,6 @@ let command =
   Command.group
     ~summary:"JPEG core simulations"
     [ "dct", Dct.command
-    ; "headers", command_decode_headers
     ; "codeblock", command_codeblock
     ; "decoder", command_decoder
     ; "accelerator", command_decoder_accelerator

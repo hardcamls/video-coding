@@ -237,7 +237,8 @@ module Sos = struct
                         [ start_scan <-- vdd ]
                     ]
                 ] )
-            ; Footer, [ when_ footer.done_ [ sm.set_next Start ] ]
+            ; ( Footer
+              , [ when_ (~:(start_footer.value) &: footer.done_) [ sm.set_next Start ] ] )
             ]
         ]);
     Header.O.Of_signal.assign
@@ -519,4 +520,14 @@ module Dht = struct
     let module Hier = Hierarchy.In_scope (I) (O) in
     Hier.hierarchical ~scope ~name create
   ;;
+end
+
+module All = struct
+  type 'a t =
+    { sof : 'a Sof.Fields.t [@rtlprefix "sof$"]
+    ; sos : 'a Sos.Fields.t [@rtlprefix "sos$"]
+    ; dqt : 'a Dqt.Fields.t [@rtlprefix "dqt$"]
+    ; dht : 'a Dht.Fields.t [@rtlprefix "dht$"]
+    }
+  [@@deriving sexp_of, hardcaml]
 end

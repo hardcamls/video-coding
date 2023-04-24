@@ -155,3 +155,13 @@ module Dht : sig
 
   include Fields_decoder.M(Fields).S
 end
+
+module All : sig
+  type 'a t =
+    { sof : 'a Sof.Fields.t
+    ; sos : 'a Sos.Fields.t
+    ; dqt : 'a Dqt.Fields.t
+    ; dht : 'a Dht.Fields.t
+    }
+  [@@deriving sexp_of, hardcaml]
+end

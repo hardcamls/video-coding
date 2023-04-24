@@ -8,16 +8,7 @@ module I : sig
     ; jpeg : 'a
     ; jpeg_valid : 'a
     ; bits_ready : 'a
-    }
-  [@@deriving sexp_of, hardcaml]
-end
-
-module All_markers : sig
-  type 'a t =
-    { sof : 'a Markers.Sof.Fields.t
-    ; sos : 'a Markers.Sos.Fields.t
-    ; dqt : 'a Markers.Dqt.Fields.t
-    ; dht : 'a Markers.Dht.Fields.t
+    ; decoder_done : 'a
     }
   [@@deriving sexp_of, hardcaml]
 end
@@ -28,7 +19,8 @@ module O : sig
     ; done_ : 'a
     ; bits : 'a
     ; bits_valid : 'a
-    ; markers : 'a All_markers.t
+    ; markers : 'a Markers.All.t
+    ; decoder_start : 'a
     }
   [@@deriving sexp_of, hardcaml]
 end
@@ -40,3 +32,33 @@ module State : sig
 end
 
 val create : Scope.t -> Interface.Create_fn(I)(O).t
+val hierarchical : Scope.t -> Interface.Create_fn(I)(O).t
+
+module With_fifo16 : sig
+  module I : sig
+    type 'a t =
+      { clocking : 'a Clocking.t
+      ; start : 'a
+      ; jpeg : 'a
+      ; jpeg_valid : 'a
+      ; bits_ready : 'a
+      ; decoder_done : 'a
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  module O : sig
+    type 'a t =
+      { jpeg_ready : 'a
+      ; done_ : 'a
+      ; bits : 'a
+      ; bits_valid : 'a
+      ; markers : 'a Markers.All.t
+      ; decoder_start : 'a
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  val create : capacity_in_bytes:int -> Scope.t -> Interface.Create_fn(I)(O).t
+  val hierarchical : capacity_in_bytes:int -> Scope.t -> Interface.Create_fn(I)(O).t
+end
