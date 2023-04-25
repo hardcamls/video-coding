@@ -200,7 +200,7 @@ let test ?(waves = false) ?(random_ready = false) jpeg =
       Int.incr pos);
     Int.incr num_cycles
   in
-  while (not (Bits.to_bool !(outputs.done_))) && !num_cycles < 10_000 do
+  while (not (Bits.to_bool !(outputs.done_))) && !num_cycles < 20_000 do
     cycle ()
   done;
   Cyclesim.cycle sim;
@@ -214,19 +214,28 @@ let test ?(waves = false) ?(random_ready = false) jpeg =
         "ECS length mismatch"
           (String.length expected_entropy_coded_segment : int)
           (String.length entropy_coded_segment : int)];
-  (* if true
-     || not
-          (String.equal
-             expected_entropy_coded_segment
-             (String.subo
-                ~len:(String.length entropy_coded_segment - 2)
-                entropy_coded_segment))
-  then
+  if not
+       (String.equal
+          expected_entropy_coded_segment
+          (String.subo
+             ~len:(String.length entropy_coded_segment - 2)
+             entropy_coded_segment))
+  then (
+    for i = 0 to String.length expected_entropy_coded_segment - 1 do
+      if not (Char.equal expected_entropy_coded_segment.[i] entropy_coded_segment.[i])
+      then
+        print_s
+          [%message
+            "mismatch"
+              (i : int)
+              (entropy_coded_segment.[i] : char)
+              (expected_entropy_coded_segment.[i] : char)]
+    done;
     print_s
       [%message
         "ECS mismatch"
           (String.subo expected_entropy_coded_segment ~pos:6250 : String.Hexdump.t)
-          (String.subo entropy_coded_segment ~pos:6250 : String.Hexdump.t)]; *)
+          (String.subo entropy_coded_segment ~pos:6250 : String.Hexdump.t)]);
   print_headers ();
   waves
 ;;
