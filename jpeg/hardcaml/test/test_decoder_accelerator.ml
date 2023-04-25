@@ -12,17 +12,21 @@ let display_rules =
   Display_rule.[ I.default (); O.default (); [ default ] ] |> List.concat
 ;;
 
+let get_entropy_coded_segment bits =
+  let sos = Util.find_next_marker_exn ~start_pos:0 ~marker_code:Marker_code.sos bits in
+  let sos_length = (Char.to_int bits.[sos + 2] lsl 8) lor Char.to_int bits.[sos + 3] in
+  let ecs = sos + 2 + sos_length in
+  let eoi = Util.find_next_marker_exn ~start_pos:ecs ~marker_code:Marker_code.eoi bits in
+  String.sub ~pos:ecs ~len:(eoi - ecs) bits
+;;
+
 let get_headers_and_model_and_bits jpeg =
   let bits = Util.load_jpeg_file jpeg in
   let headers = Model.Header.decode bits in
   let decoder = Model.init headers bits in
   let model = Model.For_testing.Sequenced.decode decoder in
   let bits = Bitstream_reader.From_string.get_buffer bits in
-  let sos = Util.find_next_marker_exn ~start_pos:0 ~marker_code:Marker_code.sos bits in
-  let sos_length = (Char.to_int bits.[sos + 2] lsl 8) lor Char.to_int bits.[sos + 3] in
-  let ecs = sos + 2 + sos_length in
-  let eoi = Util.find_next_marker_exn ~start_pos:ecs ~marker_code:Marker_code.eoi bits in
-  headers, model, String.sub ~pos:ecs ~len:(eoi - ecs) bits
+  headers, model, get_entropy_coded_segment bits
 ;;
 
 let ( <--. ) a b = a := Bits.of_int ~width:(Bits.width !a) b
@@ -187,7 +191,7 @@ let%expect_test "" =
   [%expect
     {|
     ((width 480) (height 320))
-    ((macroblock 0) (subblock 0) (width 480) (x_pos 0) (y_pos 0))
+    ((macroblock 0) (subblock 0) (block_number 0) (x_pos 0) (y_pos 0))
     ((block_number 0) (max_reconstructed_diff 1)
      (pixels
       ((e0 de db d6 d1 cd ca c8) (e4 e2 df db d7 d3 cf ce)
@@ -216,7 +220,7 @@ let%expect_test "" =
          (e9 e8 e6 e2 df db d9 d8) (ee ed eb e9 e6 e4 e2 e1)
          (ef ef ee ec eb ea e9 e8) (ed ed ed ec ec ec ec eb)
          (e9 e9 ea ea eb eb ec ec) (e6 e7 e7 e8 e9 ea eb eb))))))
-    ((macroblock 0) (subblock 1) (width 480) (x_pos 0) (y_pos 0))
+    ((macroblock 0) (subblock 1) (block_number 1) (x_pos 0) (y_pos 0))
     ((block_number 1) (max_reconstructed_diff 1)
      (pixels
       ((bf bf bf bf bf bf bf bf) (cf cf cf cf cf cf cf cf)
@@ -245,7 +249,7 @@ let%expect_test "" =
          (e3 e3 e3 e3 e3 e3 e3 e3) (ef ef ef ef ef ef ef ef)
          (f0 f0 f0 f0 f0 f0 f0 f0) (ee ee ee ee ee ee ee ee)
          (f0 f0 f0 f0 f0 f0 f0 f0) (f3 f3 f3 f3 f3 f3 f3 f3))))))
-    ((macroblock 0) (subblock 2) (width 480) (x_pos 0) (y_pos 0))
+    ((macroblock 0) (subblock 2) (block_number 2) (x_pos 0) (y_pos 0))
     ((block_number 2) (max_reconstructed_diff 1)
      (pixels
       ((c6 cb d4 dd e4 e8 e9 ea) (b3 b7 bd c6 d0 da e2 e6)
@@ -274,7 +278,7 @@ let%expect_test "" =
          (a5 a5 a6 ac b7 c5 d3 dc) (af aa a4 a2 a8 b5 c3 cd)
          (ca c2 b6 ad ab b0 b9 c0) (de d7 cc c1 ba b8 b9 bb)
          (de dc d7 d1 cb c5 c1 bf) (d6 d7 d8 d8 d5 cf c9 c6))))))
-    ((macroblock 0) (subblock 3) (width 480) (x_pos 0) (y_pos 0))
+    ((macroblock 0) (subblock 3) (block_number 3) (x_pos 0) (y_pos 0))
     ((block_number 3) (max_reconstructed_diff 1)
      (pixels
       ((d7 e0 ec f6 f9 f4 ec e5) (d7 dd e5 ed f1 f2 f0 ee)
@@ -303,7 +307,7 @@ let%expect_test "" =
          (d2 d3 d5 da e1 e9 f1 f5) (c4 c1 be bf c8 d7 e6 f0)
          (b4 af a9 a9 b2 c2 d4 e0) (ab a7 a2 a1 a8 b6 c5 cf)
          (ae ab a8 a8 ad b5 be c4) (b3 b2 b1 b2 b5 b9 be c1))))))
-    ((macroblock 0) (subblock 4) (width 480) (x_pos 0) (y_pos 0))
+    ((macroblock 0) (subblock 4) (block_number 4) (x_pos 0) (y_pos 0))
     ((block_number 4) (max_reconstructed_diff 0)
      (pixels
       ((80 80 80 80 80 80 80 80) (80 80 80 80 80 80 80 80)
@@ -332,7 +336,7 @@ let%expect_test "" =
          (80 80 80 80 80 80 80 80) (80 80 80 80 80 80 80 80)
          (80 80 80 80 80 80 80 80) (80 80 80 80 80 80 80 80)
          (80 80 80 80 80 80 80 80) (80 80 80 80 80 80 80 80))))))
-    ((macroblock 0) (subblock 5) (width 480) (x_pos 0) (y_pos 0))
+    ((macroblock 0) (subblock 5) (block_number 5) (x_pos 0) (y_pos 0))
     ((block_number 5) (max_reconstructed_diff 0)
      (pixels
       ((7b 7b 7b 7b 7b 7b 7b 7b) (7b 7b 7b 7b 7b 7b 7b 7b)

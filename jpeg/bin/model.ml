@@ -40,11 +40,14 @@ let command_decode_log =
         print_s [%message (header : Model.Header.t)];
         let decoder = Model.init header bits in
         let decoded = Model.For_testing.Sequenced.decode decoder in
+        let block_number = ref 0 in
         let rec decode decoded =
           match Sequence.hd decoded with
           | None -> (* done *) ()
           | Some component ->
-            print_s [%message (component : Model.Component.Summary.t)];
+            print_s
+              [%message (!block_number : int) (component : Model.Component.Summary.t)];
+            Int.incr block_number;
             decode (Sequence.tl_eagerly_exn decoded)
         in
         decode decoded]

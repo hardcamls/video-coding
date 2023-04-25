@@ -54,6 +54,29 @@ let headers_and_entropy_coded_segment filename =
   header, Bitstream_reader.From_string.get_buffer entropy_bits
 ;;
 
+let remove_stuffing_bytes bits =
+  let buffer = Buffer.create 1024 in
+  let rec search_for_marker pos prev =
+    if pos = String.length bits
+    then Buffer.contents buffer
+    else (
+      let c = bits.[pos] in
+      if Char.equal prev '\xff'
+      then
+        if Char.equal c '\x00'
+        then (
+          Buffer.add_char buffer prev;
+          search_for_marker (pos + 1) c)
+        else Buffer.contents buffer
+      else if Char.equal c '\xff'
+      then search_for_marker (pos + 1) c
+      else (
+        Buffer.add_char buffer c;
+        search_for_marker (pos + 1) c))
+  in
+  search_for_marker 0 '\x00'
+;;
+
 open Hardcaml
 open Signal
 open Hardcaml_jpeg
@@ -225,7 +248,7 @@ let reconstruct ~block_number frame pixels =
   let x_pos = macroblock % (width / 16) in
   print_s
     [%message
-      (macroblock : int) (subblock : int) (width : int) (x_pos : int) (y_pos : int)];
+      (macroblock : int) (subblock : int) (block_number : int) (x_pos : int) (y_pos : int)];
   let copy plane x_pos y_pos =
     for y = 0 to 7 do
       for x = 0 to 7 do

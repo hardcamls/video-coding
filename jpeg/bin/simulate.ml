@@ -11,6 +11,21 @@ let command_codeblock =
         Option.iter waves ~f:Hardcaml_waveterm_interactive.run]
 ;;
 
+let command_bytestream_decoder =
+  Command.basic
+    ~summary:"Bytestream decoder simulation"
+    [%map_open.Command
+      let jpeg = anon ("JPEG" %: string) in
+      fun () ->
+        let waves =
+          Hardcaml_jpeg_test.Test_bytestream_decoder.test
+            ~waves:true
+            ~random_ready:true
+            jpeg
+        in
+        Option.iter waves ~f:Hardcaml_waveterm_interactive.run]
+;;
+
 let command_filter_stuffed_bytes =
   Command.basic
     ~summary:"stuffed bytes simulation"
@@ -97,6 +112,7 @@ let command =
     ~summary:"JPEG core simulations"
     [ "dct", Dct.command
     ; "codeblock", command_codeblock
+    ; "bytestream-decoder", command_bytestream_decoder
     ; "decoder", command_decoder
     ; "accelerator", command_decoder_accelerator
     ; "filter-stuffed-bytes", command_filter_stuffed_bytes

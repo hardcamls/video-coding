@@ -1,3 +1,5 @@
+val get_entropy_coded_segment : string -> string
+
 val test
   :  ?waves:bool
   -> ?error_tolerance:int

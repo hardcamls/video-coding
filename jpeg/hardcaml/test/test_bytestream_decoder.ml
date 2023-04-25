@@ -17,13 +17,18 @@ let display_rules =
       ]
 ;;
 
-let read_header (outputs : _ Decoder.O.t) =
+let read_header
+    (inputs : _ Decoder.I.t)
+    (outputs : _ Decoder.O.t)
+    (outputs_before : _ Decoder.O.t)
+  =
   let unref x = Bits.to_int !x in
   let components = ref [] in
   let scan_selector = ref [] in
   let quant_tables = ref [] in
   let code_words = ref [] in
   let code_data = ref [] in
+  let entropy_coded_segment = ref [] in
   let cycle () =
     let sof = outputs.markers.sof in
     if Bits.to_bool !(sof.component_write)
@@ -53,7 +58,9 @@ let read_header (outputs : _ Decoder.O.t) =
       code_data
         := ( Markers.Dht.Header.Fields.map dht.header ~f:unref
            , Markers.Dht.Code_data.map dht.code_data ~f:unref )
-           :: !code_data
+           :: !code_data;
+    if Bits.to_bool !(outputs_before.bits_valid) && Bits.to_bool !(inputs.bits_ready)
+    then entropy_coded_segment := Bits.to_char !(outputs.bits) :: !entropy_coded_segment
   in
   let print () =
     let sof =
@@ -143,16 +150,20 @@ let read_header (outputs : _ Decoder.O.t) =
           (code_words : (dht_header * code list) list)
           (code_data : (dht_header * code_data list) list)]
   in
-  cycle, print
+  cycle, print, fun () -> String.of_char_list (List.rev !entropy_coded_segment)
 ;;
 
-let test ?(waves = false) jpeg =
+let test ?(waves = false) ?(random_ready = false) jpeg =
   let jpeg = Util.load_jpeg_file jpeg in
   let bits = Hardcaml_jpeg_model.Bitstream_reader.From_string.get_buffer jpeg in
+  let expected_entropy_coded_segment =
+    Test_decoder_accelerator.get_entropy_coded_segment bits |> Util.remove_stuffing_bytes
+  in
   let sim =
     Sim.create
       ~config:Cyclesim.Config.trace_all
-      (Decoder.create (Scope.create ~flatten_design:true ()))
+      (Decoder.create
+         (Scope.create ~flatten_design:true ~auto_label_hierarchical_ports:true ()))
   in
   let waves, sim =
     if waves
@@ -171,10 +182,13 @@ let test ?(waves = false) jpeg =
   Cyclesim.cycle sim;
   inputs.start := Bits.gnd;
   inputs.bits_ready := Bits.vdd;
-  let cycle_headers, print_headers = read_header outputs in
+  let cycle_headers, print_headers, entropy_coded_segment =
+    read_header inputs outputs outputs_before
+  in
   let num_cycles = ref 0 in
   let pos = ref 0 in
   let cycle () =
+    inputs.bits_ready := if random_ready then Bits.random ~width:1 else Bits.vdd;
     Cyclesim.cycle sim;
     cycle_headers ();
     if Bits.to_bool !(outputs_before.jpeg_ready)
@@ -191,12 +205,34 @@ let test ?(waves = false) jpeg =
   done;
   Cyclesim.cycle sim;
   Cyclesim.cycle sim;
+  let entropy_coded_segment = entropy_coded_segment () in
+  if String.length expected_entropy_coded_segment + 2
+     <> String.length entropy_coded_segment
+  then
+    print_s
+      [%message
+        "ECS length mismatch"
+          (String.length expected_entropy_coded_segment : int)
+          (String.length entropy_coded_segment : int)];
+  (* if true
+     || not
+          (String.equal
+             expected_entropy_coded_segment
+             (String.subo
+                ~len:(String.length entropy_coded_segment - 2)
+                entropy_coded_segment))
+  then
+    print_s
+      [%message
+        "ECS mismatch"
+          (String.subo expected_entropy_coded_segment ~pos:6250 : String.Hexdump.t)
+          (String.subo entropy_coded_segment ~pos:6250 : String.Hexdump.t)]; *)
   print_headers ();
   waves
 ;;
 
 let%expect_test "test reader" =
-  let waves = test ~waves:true "Mouse480.jpg" in
+  let waves = test ~waves:true ~random_ready:false "Mouse480.jpg" in
   Option.iter
     waves
     ~f:
@@ -472,11 +508,11 @@ let%expect_test "test reader" =
     │                  ││╥──────────────────────────────────────────────────────────────────           │
     │SKIP_LENGTH       ││║ 0010                                                                        │
     │                  ││╨──────────────────────────────────────────────────────────────────           │
-    │gnd               ││                                                                              │
-    │                  ││───────────────────────────────────────────────────────────────────           │
-    │vdd               ││───────────────────────────────────────────────────────────────────           │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
-    │                  ││                                                                              │
+    │                  ││╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥           │
+    │dht$dhthdr$i$bits ││║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║           │
+    │                  ││╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨           │
+    │dht$dhthdr$i$bits_││╥──────────────────────────────────────────────────────────────────           │
+    │                  ││╨                                                                             │
+    │dht$dhthdr$i$clear││╥                                                                             │
     └──────────────────┘└──────────────────────────────────────────────────────────────────────────────┘ |}]
 ;;

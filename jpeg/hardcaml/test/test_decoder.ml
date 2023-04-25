@@ -5,6 +5,10 @@ open Hardcaml_jpeg_model
 open! Hardcaml_waveterm
 module Sim = Cyclesim.With_interface (Decoder.I) (Decoder.O)
 
+(* XX decoder bug occurs at block=1875 with large reconstructed diff (38).  
+   Assuming a bytestream problem as this doesn't happen in the accelerator design. 
+*)
+
 let ( <--. ) a b = a := Bits.of_int ~width:(Bits.width !a) b
 
 let max_reconstructed_diff pixels recon =
@@ -129,12 +133,12 @@ let%expect_test "test decoder" =
   [%expect
     {|
     ((width 480) (height 320))
-    ((macroblock 0) (subblock 0) (width 480) (x_pos 0) (y_pos 0))
-    ((macroblock 0) (subblock 1) (width 480) (x_pos 0) (y_pos 0))
-    ((macroblock 0) (subblock 2) (width 480) (x_pos 0) (y_pos 0))
-    ((macroblock 0) (subblock 3) (width 480) (x_pos 0) (y_pos 0))
-    ((macroblock 0) (subblock 4) (width 480) (x_pos 0) (y_pos 0))
-    ((macroblock 0) (subblock 5) (width 480) (x_pos 0) (y_pos 0))
+    ((macroblock 0) (subblock 0) (block_number 0) (x_pos 0) (y_pos 0))
+    ((macroblock 0) (subblock 1) (block_number 1) (x_pos 0) (y_pos 0))
+    ((macroblock 0) (subblock 2) (block_number 2) (x_pos 0) (y_pos 0))
+    ((macroblock 0) (subblock 3) (block_number 3) (x_pos 0) (y_pos 0))
+    ((macroblock 0) (subblock 4) (block_number 4) (x_pos 0) (y_pos 0))
+    ((macroblock 0) (subblock 5) (block_number 5) (x_pos 0) (y_pos 0))
     ┌Signals───────────┐┌Waves─────────────────────────────────────────────────────────────────────────────────────────────┐
     │clock             ││┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌─│
     │                  ││   └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘ │

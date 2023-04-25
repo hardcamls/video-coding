@@ -161,10 +161,10 @@ let create scope (i : _ I.t) =
                   ]
               ] )
           ; ( Entropy_marker
-            , [ jpeg_ready <-- vdd
-              ; when_
+            , [ when_
                   (i.jpeg_valid &: i.bits_ready)
                   [ bits_valid <-- vdd
+                  ; jpeg_ready <-- vdd
                   ; sm.set_next Entropy_coded_segment
                   ; when_ (i.jpeg ==:. M.eoi) [ sm.set_next End_of_image ]
                   ; when_ (i.jpeg ==:. 0x0) [ bits_valid <-- gnd ]
