@@ -170,7 +170,11 @@ let create scope (i : _ I.t) =
                   ; when_ (i.jpeg ==:. 0x0) [ bits_valid <-- gnd ]
                   ]
               ] )
-          ; End_of_image, [ (* Wait for decoder to complete *) sm.set_next Start ]
+          ; ( End_of_image
+            , [ (* wait for decoder to complete final blocks.  Pump bits into the decoder to flush the bitstream reader. *)
+                bits_valid <-- vdd
+              ; sm.set_next Start
+              ] )
           ]
       ]);
   Markers.Dht.O.Of_signal.assign
