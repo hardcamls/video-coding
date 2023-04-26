@@ -19,18 +19,26 @@ open Hardcaml
 open Signal
 module Var = Always.Variable
 
+module With_identifier (Fields : Interface.S) = struct
+  type 'a t =
+    { identifier : 'a [@bits 8]
+    ; fields : 'a Fields.t
+    }
+  [@@deriving sexp_of, hardcaml]
+end
+
 module Component = struct
   module Fields = struct
     type 'a t =
-      { identifier : 'a [@bits 8]
-      ; vertical_sampling_factor : 'a [@bits 4]
+      { vertical_sampling_factor : 'a [@bits 4]
       ; horizontal_sampling_factor : 'a [@bits 4]
       ; quantization_table_identifier : 'a [@bits 8]
       }
     [@@deriving sexp_of, hardcaml]
   end
 
-  include Fields_decoder.Make (Fields)
+  module Fields_with_identifier = With_identifier (Fields)
+  include Fields_decoder.Make (Fields_with_identifier)
 end
 
 module Sof = struct
@@ -54,7 +62,7 @@ module Sof = struct
   module Fields = struct
     type 'a t =
       { frame_header : 'a Header.Fields.t
-      ; component : 'a Component.Fields.t
+      ; component : 'a Component.Fields_with_identifier.t
       ; component_address : 'a [@bits component_address_bits]
       ; component_write : 'a
       }
@@ -146,14 +154,14 @@ end
 module Scan_selector = struct
   module Fields = struct
     type 'a t =
-      { selector : 'a [@bits 8]
-      ; dc_coef_selector : 'a [@bits 4]
+      { dc_coef_selector : 'a [@bits 4]
       ; ac_coef_selector : 'a [@bits 4]
       }
     [@@deriving sexp_of, hardcaml]
   end
 
-  include Fields_decoder.Make (Fields)
+  module Fields_with_identifier = With_identifier (Fields)
+  include Fields_decoder.Make (Fields_with_identifier)
 end
 
 module Sos = struct
@@ -186,7 +194,7 @@ module Sos = struct
   module Fields = struct
     type 'a t =
       { header : 'a Header.Fields.t
-      ; scan_selector : 'a Scan_selector.Fields.t
+      ; scan_selector : 'a Scan_selector.Fields_with_identifier.t
       ; write_scan_selector : 'a
       ; footer : 'a Footer.Fields.t
       }

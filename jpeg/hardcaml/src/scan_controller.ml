@@ -157,3 +157,88 @@ let hierarchical scope =
   let module Hier = Hierarchy.In_scope (I) (O) in
   Hier.hierarchical ~scope ~name:"ctrl" create
 ;;
+
+module New = struct
+  module I = struct
+    type 'a t =
+      { clocking : 'a Clocking.t
+      ; start : 'a
+      ; sof : 'a Markers.Sof.Fields.t
+      ; sos : 'a Markers.Sos.Fields.t
+      ; done_ : 'a Ctrl.t [@rtlsuffix "_done"]
+      ; dc_pred_in : 'a [@bits 12]
+      ; dc_pred_write : 'a
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  module O = struct
+    type 'a t =
+      { start : 'a Ctrl.t [@rtlsuffix "_start"]
+      ; done_ : 'a
+      ; dc_pred_out : 'a [@bits 12]
+      ; luma_or_chroma : 'a
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  (* So, in the sof we have an identifier which we cannot control, but there will 
+     be a limited number of them in total (4 seems enough).
+
+     We need to map the indexes to a simpler linear RAM address. 
+
+     In the scan header we refer back to the frame component identifier, and must map 
+     that back to the ram index.
+  *)
+
+  let max_components = 4
+  let log_max_components = Int.ceil_log2 max_components
+
+  (* As components are decoded, map them to an index, and provide a way to reverse the mapping. *)
+  let component_mapping clocking (sof : _ Markers.Sof.Fields.t) selector =
+    let component_address = sof.component_address.:[log_max_components - 1, 0] in
+    let component_address_onehot = binary_to_onehot component_address in
+    let component_map =
+      Array.init max_components ~f:(fun index ->
+          Clocking.reg
+            clocking
+            ~enable:(sof.component_write ^: component_address_onehot.:(index))
+            sof.component.identifier)
+    in
+    let component_identifier =
+      priority_select
+        (List.init max_components ~f:(fun index ->
+             { With_valid.valid = component_map.(index) ==: selector
+             ; value = Signal.of_int ~width:log_max_components index
+             }))
+    in
+    component_identifier
+  ;;
+
+  module State = struct
+    type t =
+      | Headers
+      | Scan
+    [@@deriving sexp_of, compare, enumerate]
+  end
+
+  let _create _scope (i : _ I.t) =
+    let selector = wire 8 in
+    let _component_identifier = component_mapping i.clocking i.sof selector in
+    let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
+    let component =
+      memory
+        max_components
+        ~write_port:
+          { write_clock = i.clocking.clock
+          ; write_address = i.sof.component_address.:[log_max_components - 1, 0]
+          ; write_enable = i.sof.component_write
+          ; write_data = Markers.Component.Fields.Of_signal.pack i.sof.component.fields
+          }
+        ~read_address:(zero log_max_components)
+      |> Markers.Component.Fields.Of_signal.unpack
+    in
+    Always.(compile [ sm.switch [ Headers, []; Scan, [] ] ]);
+    O.Of_signal.of_int 0
+  ;;
+end

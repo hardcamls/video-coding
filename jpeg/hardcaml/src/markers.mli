@@ -1,16 +1,25 @@
 open! Base
 open! Hardcaml
 
+module With_identifier (Fields : Interface.S) : sig
+  type 'a t =
+    { identifier : 'a
+    ; fields : 'a Fields.t
+    }
+  [@@deriving sexp_of, hardcaml]
+end
+
 module Component : sig
   module Fields : sig
     type 'a t =
-      { identifier : 'a
-      ; vertical_sampling_factor : 'a
+      { vertical_sampling_factor : 'a
       ; horizontal_sampling_factor : 'a
       ; quantization_table_identifier : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
+
+  module Fields_with_identifier : module type of With_identifier (Fields)
 end
 
 module Sof : sig
@@ -30,7 +39,7 @@ module Sof : sig
   module Fields : sig
     type 'a t =
       { frame_header : 'a Header.Fields.t
-      ; component : 'a Component.Fields.t
+      ; component : 'a Component.Fields_with_identifier.t
       ; component_address : 'a
       ; component_write : 'a
       }
@@ -43,12 +52,13 @@ end
 module Scan_selector : sig
   module Fields : sig
     type 'a t =
-      { selector : 'a
-      ; dc_coef_selector : 'a
+      { dc_coef_selector : 'a
       ; ac_coef_selector : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
+
+  module Fields_with_identifier : module type of With_identifier (Fields)
 end
 
 module Sos : sig
@@ -77,7 +87,7 @@ module Sos : sig
   module Fields : sig
     type 'a t =
       { header : 'a Header.Fields.t
-      ; scan_selector : 'a Scan_selector.Fields.t
+      ; scan_selector : 'a Scan_selector.Fields_with_identifier.t
       ; write_scan_selector : 'a
       ; footer : 'a Footer.Fields.t
       }

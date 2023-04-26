@@ -32,12 +32,16 @@ let read_header
   let cycle () =
     let sof = outputs.markers.sof in
     if Bits.to_bool !(sof.component_write)
-    then components := Markers.Component.Fields.map sof.component ~f:unref :: !components;
+    then
+      components
+        := Markers.Component.Fields_with_identifier.map sof.component ~f:unref
+           :: !components;
     let sos = outputs.markers.sos in
     if Bits.to_bool !(sos.write_scan_selector)
     then
       scan_selector
-        := Markers.Scan_selector.Fields.map sos.scan_selector ~f:unref :: !scan_selector;
+        := Markers.Scan_selector.Fields_with_identifier.map sos.scan_selector ~f:unref
+           :: !scan_selector;
     let dqt = outputs.markers.dqt in
     if Bits.to_bool !(dqt.element_write)
     then
@@ -142,9 +146,9 @@ let read_header
       [%message
         "header"
           (sof : int Markers.Sof.Header.Fields.t)
-          (sof_components : int Markers.Component.Fields.t list)
+          (sof_components : int Markers.Component.Fields_with_identifier.t list)
           (sos_header : int Markers.Sos.Header.Fields.t)
-          (scan_selector : int Markers.Scan_selector.Fields.t list)
+          (scan_selector : int Markers.Scan_selector.Fields_with_identifier.t list)
           (sos_footer : int Markers.Sos.Footer.Fields.t)
           (quant_tables : (int * int array) list)
           (code_words : (dht_header * code list) list)
