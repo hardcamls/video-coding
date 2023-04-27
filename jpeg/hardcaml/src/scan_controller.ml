@@ -163,8 +163,8 @@ module New = struct
     type 'a t =
       { clocking : 'a Clocking.t
       ; start : 'a
-      ; sof : 'a Markers.Sof.Fields.t
-      ; sos : 'a Markers.Sos.Fields.t
+      ; sof : 'a Markers.Sof.Fields.t [@rtlprefix "sof$"]
+      ; sos : 'a Markers.Sos.Fields.t [@rtlprefix "sos$"]
       ; done_ : 'a Ctrl.t [@rtlsuffix "_done"]
       ; dc_pred_in : 'a [@bits 12]
       ; dc_pred_write : 'a
@@ -178,6 +178,8 @@ module New = struct
       ; done_ : 'a
       ; dc_pred_out : 'a [@bits 12]
       ; luma_or_chroma : 'a
+      ; x_pos : 'a [@bits 16]
+      ; y_pos : 'a [@bits 16]
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -193,6 +195,11 @@ module New = struct
 
   let max_components = 4
   let log_max_components = Int.ceil_log2 max_components
+  let max_scans = 4
+  let log_max_scans = Int.ceil_log2 max_scans
+
+  (* 1 for baseline, 2 for extended+progressive *)
+  let log_max_coef_tables = 1
 
   (* As components are decoded, map them to an index, and provide a way to reverse the mapping. *)
   let component_mapping clocking (sof : _ Markers.Sof.Fields.t) selector =
@@ -202,7 +209,7 @@ module New = struct
       Array.init max_components ~f:(fun index ->
           Clocking.reg
             clocking
-            ~enable:(sof.component_write ^: component_address_onehot.:(index))
+            ~enable:(sof.component_write &: component_address_onehot.:(index))
             sof.component.identifier)
     in
     let component_identifier =
@@ -218,14 +225,34 @@ module New = struct
   module State = struct
     type t =
       | Headers
-      | Scan
+      | Scan_component
+      | Scan_blocks
     [@@deriving sexp_of, compare, enumerate]
   end
 
-  let _create _scope (i : _ I.t) =
-    let selector = wire 8 in
-    let _component_identifier = component_mapping i.clocking i.sof selector in
+  module Scan_state = struct
+    type 'a t =
+      { dc : 'a [@bits log_max_coef_tables]
+      ; ac : 'a [@bits log_max_coef_tables]
+      ; component_index : 'a [@bits log_max_components]
+      ; x_pos : 'a [@bits 16]
+      ; y_pos : 'a [@bits 16]
+      ; dc_pred : 'a [@bits 16]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  let create scope (i : _ I.t) =
+    let ( -- ) = Scope.naming scope in
+    let component_identifier =
+      component_mapping i.clocking i.sof i.sos.scan_selector.identifier
+    in
+    let component_address = Var.wire ~default:(zero log_max_components) in
+    let scan_address = Clocking.Var.reg i.clocking ~width:log_max_scans in
+    ignore (scan_address.value -- "scan_address" : Signal.t);
+    let scan_address_next = ue scan_address.value +:. 1 in
     let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
+    ignore (sm.current -- "STATE" : Signal.t);
     let component =
       memory
         max_components
@@ -235,10 +262,105 @@ module New = struct
           ; write_enable = i.sof.component_write
           ; write_data = Markers.Component.Fields.Of_signal.pack i.sof.component.fields
           }
-        ~read_address:(zero log_max_components)
+        ~read_address:component_address.value
       |> Markers.Component.Fields.Of_signal.unpack
     in
-    Always.(compile [ sm.switch [ Headers, []; Scan, [] ] ]);
-    O.Of_signal.of_int 0
+    let update_scan = Var.wire ~default:gnd in
+    let scan_r = Scan_state.Of_always.reg (Clocking.to_spec i.clocking) in
+    Scan_state.Of_always.apply_names ~naming_op:( -- ) ~prefix:"scan$" scan_r;
+    let scan =
+      memory
+        max_scans
+        ~write_port:
+          { write_clock = i.clocking.clock
+          ; write_address = scan_address.value
+          ; write_enable = i.sos.write_scan_selector |: update_scan.value
+          ; write_data =
+              Scan_state.(
+                Of_signal.(
+                  pack
+                    (mux2 update_scan.value (Of_always.value scan_r)
+                    @@ map2
+                         port_widths
+                         { dc = i.sos.scan_selector.fields.dc_coef_selector
+                         ; ac = i.sos.scan_selector.fields.ac_coef_selector
+                         ; component_index = component_identifier.value
+                         ; x_pos = zero 16
+                         ; y_pos = zero 16
+                         ; dc_pred = zero 16
+                         }
+                         ~f:(fun w d -> sel_bottom d w))))
+          }
+        ~read_address:scan_address.value
+      |> Scan_state.Of_signal.unpack
+    in
+    (* 
+      foreach scan_copmonent {
+        for vert_sampling {
+          for horz_sampling {
+            decode a block
+          }
+        }
+      }   
+    *)
+    let blk_x = Clocking.Var.reg i.clocking ~width:4 in
+    let blk_x_next = blk_x.value +:. 1 in
+    let blk_y = Clocking.Var.reg i.clocking ~width:4 in
+    let blk_y_next = blk_y.value +:. 1 in
+    let x_pos_next = scan_r.x_pos.value +:. 8 in
+    let y_pos_next = scan_r.y_pos.value +:. 8 in
+    let x_pos_start = Clocking.Var.reg i.clocking ~width:16 in
+    let y_pos_start = Clocking.Var.reg i.clocking ~width:16 in
+    Always.(
+      compile
+        [ sm.switch
+            [ ( Headers
+              , [ when_
+                    i.sos.write_scan_selector
+                    [ scan_address <-- lsbs scan_address_next ]
+                ; when_ i.start [ scan_address <--. 0; sm.set_next Scan_component ]
+                ] )
+            ; ( Scan_component
+              , [ component_address <-- scan.component_index
+                ; Scan_state.Of_always.assign scan_r scan
+                ; x_pos_start <-- scan_r.x_pos.value
+                ; y_pos_start <-- scan_r.y_pos.value
+                ; blk_x <--. 0
+                ; blk_y <--. 0
+                ; sm.set_next Scan_blocks
+                ] )
+            ; ( Scan_blocks
+              , [ component_address <-- scan_r.component_index.value
+                ; when_
+                    vdd
+                    [ blk_x <-- blk_x_next
+                    ; scan_r.x_pos <-- x_pos_next
+                    ; when_
+                        (blk_x_next ==: component.horizontal_sampling_factor)
+                        [ blk_x <--. 0
+                        ; blk_y <-- blk_y_next
+                        ; scan_r.x_pos <-- x_pos_start.value
+                        ; scan_r.y_pos <-- y_pos_next
+                        ; when_
+                            (blk_y_next ==: component.vertical_sampling_factor)
+                            [ scan_address <-- lsbs scan_address_next
+                            ; update_scan <-- vdd
+                            ; blk_y <--. 0
+                            ; scan_r.x_pos <-- x_pos_next
+                            ; scan_r.y_pos <-- y_pos_start.value
+                            ; sm.set_next Scan_component
+                            ]
+                        ]
+                    ]
+                ] )
+            ]
+        ]);
+    { O.start = { codeblock_decoder = gnd; idct = gnd; output = gnd }
+    ; done_ = gnd
+    ; dc_pred_out = zero 12
+    ; luma_or_chroma = gnd
+    ; x_pos = scan_r.x_pos.value
+    ; y_pos = scan_r.y_pos.value
+    }
   ;;
 end

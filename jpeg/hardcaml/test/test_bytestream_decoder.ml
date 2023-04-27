@@ -257,22 +257,38 @@ let%expect_test "test reader" =
          ~display_rules);
   [%expect
     {|
+    ("ECS length mismatch" ("String.length expected_entropy_coded_segment" 6281)
+     ("String.length entropy_coded_segment" 6284))
+    ("ECS mismatch"
+     ("String.subo expected_entropy_coded_segment ~pos:6250"
+      ("00000000  a6 db a6 05 34 9e 09 9c  54 63 4b 92 eb b1 d5 a2  |....4...TcK.....|"
+       "00000010  08 d3 87 6c 52 75 68 d2  4f 6a 32 92 4d da 03     |...lRuh.Oj2.M..|"))
+     ("String.subo entropy_coded_segment ~pos:6250"
+      ("00000000  a6 db a6 05 34 9e 09 9c  54 63 4b 92 eb b1 d5 a2  |....4...TcK.....|"
+       "00000010  08 d3 87 6c 52 75 68 d2  4f 6a 32 92 4d da 03 ff  |...lRuh.Oj2.M...|"
+       "00000020  d9 00                                             |..|")))
     (header
      (sof
       ((length 17) (sample_precision 8) (height 320) (width 480)
        (number_of_components 3)))
      (sof_components
-      (((identifier 1) (vertical_sampling_factor 2)
-        (horizontal_sampling_factor 2) (quantization_table_identifier 0))
-       ((identifier 2) (vertical_sampling_factor 1)
-        (horizontal_sampling_factor 1) (quantization_table_identifier 1))
-       ((identifier 3) (vertical_sampling_factor 1)
-        (horizontal_sampling_factor 1) (quantization_table_identifier 1))))
+      (((identifier 1)
+        (fields
+         ((vertical_sampling_factor 2) (horizontal_sampling_factor 2)
+          (quantization_table_identifier 0))))
+       ((identifier 2)
+        (fields
+         ((vertical_sampling_factor 1) (horizontal_sampling_factor 1)
+          (quantization_table_identifier 1))))
+       ((identifier 3)
+        (fields
+         ((vertical_sampling_factor 1) (horizontal_sampling_factor 1)
+          (quantization_table_identifier 1))))))
      (sos_header ((length 12) (number_of_image_components 3)))
      (scan_selector
-      (((selector 1) (dc_coef_selector 0) (ac_coef_selector 0))
-       ((selector 2) (dc_coef_selector 1) (ac_coef_selector 1))
-       ((selector 3) (dc_coef_selector 1) (ac_coef_selector 1))))
+      (((identifier 1) (fields ((dc_coef_selector 0) (ac_coef_selector 0))))
+       ((identifier 2) (fields ((dc_coef_selector 1) (ac_coef_selector 1))))
+       ((identifier 3) (fields ((dc_coef_selector 1) (ac_coef_selector 1))))))
      (sos_footer
       ((start_of_predictor_selection 0) (end_of_predictor_selection 63)
        (successive_approximation_bit_high 0)
@@ -443,7 +459,7 @@ let%expect_test "test reader" =
     │sos$number_of_imag││ 00║ 03                                                                       │
     │                  ││───╨───────────────────────────────────────────────────────────────           │
     │                  ││───╥───────────────────────────────────────────────────────────────           │
-    │sos$selector      ││ 00║ 03                                                                       │
+    │sos$identifier    ││ 00║ 03                                                                       │
     │                  ││───╨───────────────────────────────────────────────────────────────           │
     │                  ││───╥───────────────────────────────────────────────────────────────           │
     │sos$dc_coef_select││ 0 ║ 1                                                                        │
