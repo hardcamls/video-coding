@@ -44,6 +44,7 @@ module New : sig
       ; done_ : 'a Ctrl.t
       ; dc_pred_in : 'a
       ; dc_pred_write : 'a
+      ; all_done : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -56,6 +57,8 @@ module New : sig
       ; luma_or_chroma : 'a
       ; x_pos : 'a
       ; y_pos : 'a
+      ; scan_index : 'a
+      ; starter : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end

@@ -159,6 +159,14 @@ let hierarchical scope =
 ;;
 
 module New = struct
+  let max_components = 4
+  let log_max_components = Int.ceil_log2 max_components
+  let max_scans = 4
+  let log_max_scans = Int.ceil_log2 max_scans
+
+  (* 1 for baseline, 2 for extended+progressive *)
+  let log_max_coef_tables = 1
+
   module I = struct
     type 'a t =
       { clocking : 'a Clocking.t
@@ -168,6 +176,7 @@ module New = struct
       ; done_ : 'a Ctrl.t [@rtlsuffix "_done"]
       ; dc_pred_in : 'a [@bits 12]
       ; dc_pred_write : 'a
+      ; all_done : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
@@ -180,26 +189,11 @@ module New = struct
       ; luma_or_chroma : 'a
       ; x_pos : 'a [@bits 16]
       ; y_pos : 'a [@bits 16]
+      ; scan_index : 'a [@bits log_max_scans]
+      ; starter : 'a
       }
     [@@deriving sexp_of, hardcaml]
   end
-
-  (* So, in the sof we have an identifier which we cannot control, but there will 
-     be a limited number of them in total (4 seems enough).
-
-     We need to map the indexes to a simpler linear RAM address. 
-
-     In the scan header we refer back to the frame component identifier, and must map 
-     that back to the ram index.
-  *)
-
-  let max_components = 4
-  let log_max_components = Int.ceil_log2 max_components
-  let max_scans = 4
-  let log_max_scans = Int.ceil_log2 max_scans
-
-  (* 1 for baseline, 2 for extended+progressive *)
-  let log_max_coef_tables = 1
 
   (* As components are decoded, map them to an index, and provide a way to reverse the mapping. *)
   let component_mapping clocking (sof : _ Markers.Sof.Fields.t) selector =
@@ -225,7 +219,8 @@ module New = struct
   module State = struct
     type t =
       | Headers
-      | Component
+      | Component_start
+      | Component_read
       | Blocks
     [@@deriving sexp_of, compare, enumerate, variants]
 
@@ -398,30 +393,38 @@ module New = struct
     in
     let last_col = x_pos_next ==: component_width in
     let last_row = y_pos_next ==: component_height in
+    let starter = Clocking.Var.reg i.clocking ~width:1 in
     Always.(
       compile
         [ update_scan <-- gnd
+        ; starter <-- gnd
         ; sm.switch
             [ ( Headers
               , [ when_
                     i.sos.write_scan_selector
                     [ scan_address <-- lsbs scan_address_next ]
-                ; when_ i.start [ scan_address <--. 0; sm.set_next Component ]
+                ; when_ i.start [ scan_address <--. 0; sm.set_next Component_start ]
                 ] )
-            ; ( Component
+            ; ( Component_start
+              , [ component_address <-- scan.component_index
+                ; blk_x <--. 0
+                ; blk_y <--. 0
+                ; starter <-- vdd
+                ; sm.set_next Component_read
+                ] )
+            ; ( Component_read
               , [ component_address <-- scan.component_index
                 ; Scan_state.Of_always.assign scan_r scan
                 ; x_pos_start <-- scan.x_pos
                 ; y_pos_start <-- scan.y_pos
-                ; blk_x <--. 0
-                ; blk_y <--. 0
                 ; sm.set_next Blocks
                 ] )
             ; ( Blocks
               , [ component_address <-- scan_r.component_index.value
                 ; when_
-                    vdd
-                    [ blk_x <-- blk_x_next
+                    (i.all_done &: ~:(starter.value))
+                    [ starter <-- vdd
+                    ; blk_x <-- blk_x_next
                     ; scan_r.x_pos <-- x_pos_next
                     ; when_
                         (blk_x_next ==: component.horizontal_sampling_factor)
@@ -435,13 +438,14 @@ module New = struct
                             ; when_ last_component [ scan_address <--. 0 ]
                             ; scan_address_write <-- scan_address.value
                             ; update_scan <-- vdd
+                            ; starter <-- gnd
                             ; blk_y <--. 0
                             ; scan_r.x_pos <-- x_pos_next
                             ; scan_r.y_pos <-- y_pos_start.value
                             ; when_
                                 (x_pos_next ==: component_width)
                                 [ scan_r.x_pos <--. 0; scan_r.y_pos <-- y_pos_next ]
-                            ; sm.set_next Component
+                            ; sm.set_next Component_start
                             ; when_
                                 (last_component &: last_col &: last_row)
                                 [ sm.set_next Headers ]
@@ -452,11 +456,13 @@ module New = struct
             ]
         ]);
     { O.start = { codeblock_decoder = gnd; idct = gnd; output = gnd }
-    ; done_ = gnd
+    ; done_ = sm.is Headers
     ; dc_pred_out = zero 12
     ; luma_or_chroma = gnd
     ; x_pos = scan_r.x_pos.value @: zero 3
     ; y_pos = scan_r.y_pos.value @: zero 3
+    ; scan_index = scan_address.value
+    ; starter = starter.value
     }
   ;;
 end
