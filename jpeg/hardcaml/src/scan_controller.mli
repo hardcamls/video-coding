@@ -60,5 +60,11 @@ module New : sig
     [@@deriving sexp_of, hardcaml]
   end
 
+  module State : sig
+    type t
+
+    val strings : string list
+  end
+
   val create : Scope.t -> Interface.Create_fn(I)(O).t
 end

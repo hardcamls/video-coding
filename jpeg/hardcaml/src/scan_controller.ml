@@ -225,9 +225,11 @@ module New = struct
   module State = struct
     type t =
       | Headers
-      | Scan_component
-      | Scan_blocks
-    [@@deriving sexp_of, compare, enumerate]
+      | Component
+      | Blocks
+    [@@deriving sexp_of, compare, enumerate, variants]
+
+    let strings = List.map all ~f:(fun v -> Sexp.to_string (sexp_of_t v))
   end
 
   module Scan_state = struct
@@ -235,23 +237,89 @@ module New = struct
       { dc : 'a [@bits log_max_coef_tables]
       ; ac : 'a [@bits log_max_coef_tables]
       ; component_index : 'a [@bits log_max_components]
-      ; x_pos : 'a [@bits 16]
-      ; y_pos : 'a [@bits 16]
-      ; dc_pred : 'a [@bits 16]
+      ; x_pos : 'a [@bits 13]
+      ; y_pos : 'a [@bits 13]
+      ; dc_pred : 'a [@bits 12]
       }
     [@@deriving sexp_of, hardcaml]
   end
 
+  let max_sampling_factors (i : _ I.t) clear =
+    let clocking = { i.clocking with clear = i.clocking.clear |: clear } in
+    let enable = i.sof.component_write in
+    let max_reg factor =
+      Clocking.reg_fb clocking ~width:(width factor) ~enable ~f:(fun d ->
+          mux2 (factor >: d) factor d)
+    in
+    let max_horz =
+      let factor = i.sof.component.fields.horizontal_sampling_factor in
+      max_reg factor
+    in
+    let max_vert =
+      let factor = i.sof.component.fields.vertical_sampling_factor in
+      max_reg factor
+    in
+    max_horz, max_vert
+  ;;
+
+  let padded_width_and_height_in_blocks (i : _ I.t) ~max_horz_sampling ~max_vert_sampling =
+    let width = i.sof.frame_header.width in
+    let height = i.sof.frame_header.height in
+    let rounding max =
+      mux max ([ 0; 7; 15; 23; 31 ] |> List.map ~f:(Signal.of_int ~width:16))
+    in
+    let width = width +: rounding max_horz_sampling in
+    let height = height +: rounding max_vert_sampling in
+    let round_to max x =
+      mux
+        max
+        [ drop_bottom x 3
+        ; drop_bottom x 3
+        ; drop_bottom x 4 @: zero 1
+        ; drop_bottom x 4 @: zero 1
+        ; drop_bottom x 5 @: zero 2
+        ]
+    in
+    round_to max_horz_sampling width, round_to max_vert_sampling height
+  ;;
+
+  let component_width_and_height_in_blocks
+      ~width_in_blocks
+      ~height_in_blocks
+      ~max_horz_sampling
+      ~max_vert_sampling
+      ~horz_sampling
+      ~vert_sampling
+    =
+    let scale max sampling size =
+      let scale = max -: sampling in
+      log_shift srl size scale
+    in
+    ( scale max_horz_sampling horz_sampling width_in_blocks
+    , scale max_vert_sampling vert_sampling height_in_blocks )
+  ;;
+
   let create scope (i : _ I.t) =
     let ( -- ) = Scope.naming scope in
+    let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
     let component_identifier =
       component_mapping i.clocking i.sof i.sos.scan_selector.identifier
     in
+    let max_horz_sampling, max_vert_sampling =
+      max_sampling_factors i gnd (* XXX need to reset between frames *)
+    in
+    ignore (max_horz_sampling -- "max_horz_sampling" : Signal.t);
+    ignore (max_vert_sampling -- "max_vert_sampling" : Signal.t);
+    let width_in_blocks, height_in_blocks =
+      padded_width_and_height_in_blocks i ~max_horz_sampling ~max_vert_sampling
+    in
+    ignore (width_in_blocks -- "width_in_blocks" : Signal.t);
+    ignore (height_in_blocks -- "height_in_blocks" : Signal.t);
     let component_address = Var.wire ~default:(zero log_max_components) in
     let scan_address = Clocking.Var.reg i.clocking ~width:log_max_scans in
     ignore (scan_address.value -- "scan_address" : Signal.t);
+    let scan_address_write = Clocking.Var.reg i.clocking ~width:log_max_scans in
     let scan_address_next = ue scan_address.value +:. 1 in
-    let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
     ignore (sm.current -- "STATE" : Signal.t);
     let component =
       memory
@@ -265,15 +333,27 @@ module New = struct
         ~read_address:component_address.value
       |> Markers.Component.Fields.Of_signal.unpack
     in
-    let update_scan = Var.wire ~default:gnd in
+    let update_scan = Clocking.Var.reg i.clocking ~width:1 in
     let scan_r = Scan_state.Of_always.reg (Clocking.to_spec i.clocking) in
+    let component_width, component_height =
+      component_width_and_height_in_blocks
+        ~width_in_blocks
+        ~height_in_blocks
+        ~max_horz_sampling
+        ~max_vert_sampling
+        ~horz_sampling:component.horizontal_sampling_factor
+        ~vert_sampling:component.vertical_sampling_factor
+    in
+    ignore (component_width -- "component_width" : Signal.t);
+    ignore (component_height -- "component_height" : Signal.t);
     Scan_state.Of_always.apply_names ~naming_op:( -- ) ~prefix:"scan$" scan_r;
     let scan =
       memory
         max_scans
         ~write_port:
           { write_clock = i.clocking.clock
-          ; write_address = scan_address.value
+          ; write_address =
+              mux2 update_scan.value scan_address_write.value scan_address.value
           ; write_enable = i.sos.write_scan_selector |: update_scan.value
           ; write_data =
               Scan_state.(
@@ -285,9 +365,9 @@ module New = struct
                          { dc = i.sos.scan_selector.fields.dc_coef_selector
                          ; ac = i.sos.scan_selector.fields.ac_coef_selector
                          ; component_index = component_identifier.value
-                         ; x_pos = zero 16
-                         ; y_pos = zero 16
-                         ; dc_pred = zero 16
+                         ; x_pos = zero 13
+                         ; y_pos = zero 13
+                         ; dc_pred = zero 12
                          }
                          ~f:(fun w d -> sel_bottom d w))))
           }
@@ -304,32 +384,40 @@ module New = struct
       }   
     *)
     let blk_x = Clocking.Var.reg i.clocking ~width:4 in
+    ignore (blk_x.value -- "blk_x" : Signal.t);
     let blk_x_next = blk_x.value +:. 1 in
     let blk_y = Clocking.Var.reg i.clocking ~width:4 in
+    ignore (blk_y.value -- "blk_y" : Signal.t);
     let blk_y_next = blk_y.value +:. 1 in
-    let x_pos_next = scan_r.x_pos.value +:. 8 in
-    let y_pos_next = scan_r.y_pos.value +:. 8 in
-    let x_pos_start = Clocking.Var.reg i.clocking ~width:16 in
-    let y_pos_start = Clocking.Var.reg i.clocking ~width:16 in
+    let x_pos_next = scan_r.x_pos.value +:. 1 in
+    let y_pos_next = scan_r.y_pos.value +:. 1 in
+    let x_pos_start = Clocking.Var.reg i.clocking ~width:13 in
+    let y_pos_start = Clocking.Var.reg i.clocking ~width:13 in
+    let last_component =
+      scan_address_next ==: i.sos.header.number_of_image_components.:[log_max_scans, 0]
+    in
+    let last_col = x_pos_next ==: component_width in
+    let last_row = y_pos_next ==: component_height in
     Always.(
       compile
-        [ sm.switch
+        [ update_scan <-- gnd
+        ; sm.switch
             [ ( Headers
               , [ when_
                     i.sos.write_scan_selector
                     [ scan_address <-- lsbs scan_address_next ]
-                ; when_ i.start [ scan_address <--. 0; sm.set_next Scan_component ]
+                ; when_ i.start [ scan_address <--. 0; sm.set_next Component ]
                 ] )
-            ; ( Scan_component
+            ; ( Component
               , [ component_address <-- scan.component_index
                 ; Scan_state.Of_always.assign scan_r scan
-                ; x_pos_start <-- scan_r.x_pos.value
-                ; y_pos_start <-- scan_r.y_pos.value
+                ; x_pos_start <-- scan.x_pos
+                ; y_pos_start <-- scan.y_pos
                 ; blk_x <--. 0
                 ; blk_y <--. 0
-                ; sm.set_next Scan_blocks
+                ; sm.set_next Blocks
                 ] )
-            ; ( Scan_blocks
+            ; ( Blocks
               , [ component_address <-- scan_r.component_index.value
                 ; when_
                     vdd
@@ -344,11 +432,19 @@ module New = struct
                         ; when_
                             (blk_y_next ==: component.vertical_sampling_factor)
                             [ scan_address <-- lsbs scan_address_next
+                            ; when_ last_component [ scan_address <--. 0 ]
+                            ; scan_address_write <-- scan_address.value
                             ; update_scan <-- vdd
                             ; blk_y <--. 0
                             ; scan_r.x_pos <-- x_pos_next
                             ; scan_r.y_pos <-- y_pos_start.value
-                            ; sm.set_next Scan_component
+                            ; when_
+                                (x_pos_next ==: component_width)
+                                [ scan_r.x_pos <--. 0; scan_r.y_pos <-- y_pos_next ]
+                            ; sm.set_next Component
+                            ; when_
+                                (last_component &: last_col &: last_row)
+                                [ sm.set_next Headers ]
                             ]
                         ]
                     ]
@@ -359,8 +455,8 @@ module New = struct
     ; done_ = gnd
     ; dc_pred_out = zero 12
     ; luma_or_chroma = gnd
-    ; x_pos = scan_r.x_pos.value
-    ; y_pos = scan_r.y_pos.value
+    ; x_pos = scan_r.x_pos.value @: zero 3
+    ; y_pos = scan_r.y_pos.value @: zero 3
     }
   ;;
 end
