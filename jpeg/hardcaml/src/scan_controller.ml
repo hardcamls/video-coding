@@ -369,15 +369,6 @@ module New = struct
         ~read_address:scan_address.value
       |> Scan_state.Of_signal.unpack
     in
-    (* 
-      foreach scan_copmonent {
-        for vert_sampling {
-          for horz_sampling {
-            decode a block
-          }
-        }
-      }   
-    *)
     let blk_x = Clocking.Var.reg i.clocking ~width:4 in
     ignore (blk_x.value -- "blk_x" : Signal.t);
     let blk_x_next = blk_x.value +:. 1 in
@@ -406,10 +397,12 @@ module New = struct
                 ; when_ i.start [ scan_address <--. 0; sm.set_next Component_start ]
                 ] )
             ; ( Component_start
-              , [ component_address <-- scan.component_index
+              , [ (* The scan component write back happens here.  It is read in 
+                     the next state - this is needed for scans with a single 
+                     component. *)
+                  component_address <-- scan.component_index
                 ; blk_x <--. 0
                 ; blk_y <--. 0
-                ; starter <-- vdd
                 ; sm.set_next Component_read
                 ] )
             ; ( Component_read
@@ -417,6 +410,7 @@ module New = struct
                 ; Scan_state.Of_always.assign scan_r scan
                 ; x_pos_start <-- scan.x_pos
                 ; y_pos_start <-- scan.y_pos
+                ; starter <-- vdd
                 ; sm.set_next Blocks
                 ] )
             ; ( Blocks

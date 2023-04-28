@@ -31,6 +31,21 @@ let command_jpeg_decoder =
           (Circ.create_exn ~name:"decoder" (Decoder.create scope))]
 ;;
 
+let command_scan_controller =
+  Command.basic
+    ~summary:"Generate RTL for JPEG scan controller"
+    [%map_open.Command
+      let () = return () in
+      fun () ->
+        let module Scan = Hardcaml_jpeg.Scan_controller.New in
+        let module Circ = Circuit.With_interface (Scan.I) (Scan.O) in
+        let scope = Scope.create () in
+        Rtl.print
+          Verilog
+          ~database:(Scope.circuit_database scope)
+          (Circ.create_exn ~name:"scan" (Scan.create scope))]
+;;
+
 let command_bytestream_reader =
   Command.basic
     ~summary:"Generate RTL for byte stream decoder"
@@ -53,5 +68,6 @@ let () =
        [ "accelerator", command_jpeg_decoder_accelerator
        ; "decoder", command_jpeg_decoder
        ; "bytestream-reader", command_bytestream_reader
+       ; "scan-controller", command_scan_controller
        ])
 ;;
