@@ -8,10 +8,13 @@ open! Hardcaml
 module I = struct
   type 'a t =
     { clocking : 'a Clocking.t
-    ; start : 'a
+    ; start_codeblock_decoder : 'a
+    ; start_idct : 'a
     ; dht : 'a Markers.Dht.Fields.t
     ; dqt : 'a Markers.Dqt.Fields.t
-    ; luma_or_chroma : 'a
+    ; ac_table_select : 'a [@bits Scan_controller.log_max_scans]
+    ; dc_table_select : 'a [@bits Scan_controller.log_max_scans]
+    ; qnt_table_select : 'a [@bits Scan_controller.log_max_components]
     ; dc_pred_in : 'a [@bits 12]
     ; jpeg : 'a [@bits 16]
     ; jpeg_valid : 'a
@@ -38,10 +41,13 @@ let create scope (i : _ I.t) =
     Decoder_datapath.hierarchical
       scope
       { Decoder_datapath.I.clocking = i.clocking
-      ; start = i.start
+      ; start_codeblock_decoder = i.start_codeblock_decoder
+      ; start_idct = i.start_idct
       ; dht = i.dht
       ; dqt = i.dqt
-      ; luma_or_chroma = i.luma_or_chroma
+      ; ac_table_select = i.ac_table_select
+      ; dc_table_select = i.dc_table_select
+      ; qnt_table_select = i.qnt_table_select
       ; dc_pred_in = i.dc_pred_in
       ; bits = bitstream.bits
       ; bits_valid = bitstream.bits_valid
@@ -63,7 +69,7 @@ let create scope (i : _ I.t) =
     (Bitstream_reader.hierarchical
        scope
        { Bitstream_reader.I.clocking = i.clocking
-       ; start = i.start
+       ; start = i.start_codeblock_decoder
        ; read_bits = datapath.read_bits
        ; jpeg_in = filter_stuffed_bytes.o_data
        ; jpeg_valid = filter_stuffed_bytes.o_valid

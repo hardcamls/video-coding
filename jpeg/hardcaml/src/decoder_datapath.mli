@@ -3,10 +3,13 @@ open Hardcaml
 module I : sig
   type 'a t =
     { clocking : 'a Clocking.t
-    ; start : 'a
+    ; start_codeblock_decoder : 'a
+    ; start_idct : 'a
     ; dht : 'a Markers.Dht.Fields.t
     ; dqt : 'a Markers.Dqt.Fields.t
-    ; luma_or_chroma : 'a
+    ; ac_table_select : 'a
+    ; dc_table_select : 'a
+    ; qnt_table_select : 'a
     ; dc_pred_in : 'a
     ; bits : 'a
     ; bits_valid : 'a

@@ -4,10 +4,13 @@ open! Hardcaml
 module I = struct
   type 'a t =
     { clocking : 'a Clocking.t
-    ; start : 'a
+    ; start_codeblock_decoder : 'a
+    ; start_idct : 'a
     ; dht : 'a Markers.Dht.Fields.t
     ; dqt : 'a Markers.Dqt.Fields.t
-    ; luma_or_chroma : 'a
+    ; ac_table_select : 'a [@bits Scan_controller.log_max_scans]
+    ; dc_table_select : 'a [@bits Scan_controller.log_max_scans]
+    ; qnt_table_select : 'a [@bits Scan_controller.log_max_components]
     ; dc_pred_in : 'a [@bits 12]
     ; bits : 'a [@bits 16]
     ; bits_valid : 'a
@@ -135,14 +138,13 @@ let done_delay ~count clocking ~start ~done_ =
 ;;
 
 let create scope (i : _ I.t) =
-  let table_id = gnd in
   let codeblock_decoder =
     Codeblock_decoder.hierarchical
       scope
       { Codeblock_decoder.I.clocking = i.clocking
       ; dht = i.dht
-      ; start = i.start
-      ; table_id = i.luma_or_chroma
+      ; start = i.start_codeblock_decoder
+      ; table_id = i.dc_table_select.:(0)
       ; bits = i.bits
       ; bits_valid = i.bits_valid
       ; dc_pred = i.dc_pred_in
@@ -154,7 +156,7 @@ let create scope (i : _ I.t) =
       { Dequant.I.clocking = i.clocking
       ; coefs_in = codeblock_decoder.idct_coefs
       ; dqt = i.dqt
-      ; table_select = table_id
+      ; table_select = i.qnt_table_select.:(0)
       }
   in
   let pixel, idct_done =
@@ -168,7 +170,7 @@ let create scope (i : _ I.t) =
     idct_with_rams
       ~scope
       ~clocking:i.clocking
-      ~start:i.start
+      ~start:i.start_idct
       ~coefs:dequant.coefs_out
       ~output_read_port
   in
@@ -179,8 +181,12 @@ let create scope (i : _ I.t) =
   ; dc_pred_out = codeblock_decoder.idct_coefs.coef
   ; dc_pred_write = codeblock_decoder.write_dc_pred
   ; done_ =
-      done_delay ~count:2 i.clocking ~start:i.start ~done_:codeblock_decoder.done_
-      &: done_delay ~count:2 i.clocking ~start:i.start ~done_:idct_done
+      done_delay
+        ~count:2
+        i.clocking
+        ~start:i.start_codeblock_decoder
+        ~done_:codeblock_decoder.done_
+      &: done_delay ~count:2 i.clocking ~start:i.start_idct ~done_:idct_done
   }
 ;;
 

@@ -37,7 +37,7 @@ let command_scan_controller =
     [%map_open.Command
       let () = return () in
       fun () ->
-        let module Scan = Hardcaml_jpeg.Scan_controller.New in
+        let module Scan = Hardcaml_jpeg.Scan_controller.Core in
         let module Circ = Circuit.With_interface (Scan.I) (Scan.O) in
         let scope = Scope.create () in
         Rtl.print

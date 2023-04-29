@@ -1,6 +1,11 @@
 open! Base
 open Hardcaml
 
+val max_components : int
+val log_max_components : int
+val max_scans : int
+val log_max_scans : int
+
 module Ctrl : sig
   type 'a t =
     { codeblock_decoder : 'a
@@ -10,31 +15,7 @@ module Ctrl : sig
   [@@deriving sexp_of, hardcaml]
 end
 
-module I : sig
-  type 'a t =
-    { clocking : 'a Clocking.t
-    ; start : 'a
-    ; done_ : 'a Ctrl.t
-    ; dc_pred_in : 'a
-    ; dc_pred_write : 'a
-    }
-  [@@deriving sexp_of, hardcaml]
-end
-
-module O : sig
-  type 'a t =
-    { start : 'a Ctrl.t
-    ; done_ : 'a
-    ; dc_pred_out : 'a
-    ; luma_or_chroma : 'a
-    }
-  [@@deriving sexp_of, hardcaml]
-end
-
-val create : Scope.t -> Interface.Create_fn(I)(O).t
-val hierarchical : Scope.t -> Interface.Create_fn(I)(O).t
-
-module New : sig
+module Core : sig
   module I : sig
     type 'a t =
       { clocking : 'a Clocking.t
@@ -52,7 +33,9 @@ module New : sig
     type 'a t =
       { done_ : 'a
       ; dc_pred_out : 'a
-      ; luma_or_chroma : 'a
+      ; ac_table_select : 'a
+      ; dc_table_select : 'a
+      ; qnt_table_select : 'a
       ; x_pos : 'a
       ; y_pos : 'a
       ; scan_index : 'a
@@ -89,7 +72,9 @@ module With_pipeline_coontrol : sig
     type 'a t =
       { done_ : 'a
       ; dc_pred_out : 'a
-      ; luma_or_chroma : 'a
+      ; ac_table_select : 'a
+      ; dc_table_select : 'a
+      ; qnt_table_select : 'a
       ; x_pos : 'a
       ; y_pos : 'a
       ; scan_index : 'a

@@ -66,9 +66,6 @@ let test ?(waves = true) ?(error_tolerance = 2) ?num_blocks_to_decode jpeg =
   Util.load_huffman_tables ~cycle:(fun () -> Cyclesim.cycle sim) inputs.dht huffman_tables;
   let quant_tables = Model.Header.quant_tables headers in
   Util.load_quant_tables ~cycle:(fun () -> Cyclesim.cycle sim) inputs.dqt quant_tables;
-  inputs.start := Bits.vdd;
-  Cyclesim.cycle sim;
-  inputs.start := Bits.gnd;
   inputs.jpeg_valid := Bits.vdd;
   let pos = ref 0 in
   let get_data () =
@@ -122,11 +119,15 @@ let test ?(waves = true) ?(error_tolerance = 2) ?num_blocks_to_decode jpeg =
   in
   let run_one_block block =
     let subblock = block % 6 in
-    inputs.start := Bits.vdd;
-    inputs.luma_or_chroma := Bits.of_bool (subblock >= 4);
+    inputs.start_codeblock_decoder := Bits.vdd;
+    inputs.start_idct := Bits.vdd;
+    inputs.ac_table_select := Bits.of_int ~width:2 (if subblock >= 4 then 1 else 0);
+    inputs.dc_table_select := Bits.of_int ~width:2 (if subblock >= 4 then 1 else 0);
+    inputs.qnt_table_select := Bits.of_int ~width:2 (if subblock >= 4 then 1 else 0);
     inputs.dc_pred_in <--. get_dc_pred block;
     cycle ();
-    inputs.start := Bits.gnd;
+    inputs.start_codeblock_decoder := Bits.gnd;
+    inputs.start_idct := Bits.gnd;
     cycle ();
     let pixels = upload_pixels () in
     while not (Bits.to_bool !(outputs.done_)) do
@@ -188,8 +189,7 @@ let%expect_test "" =
          ~display_width:120
          ~display_height:75
          ~wave_width:(-30));
-  [%expect
-    {|
+  [%expect{|
     ((width 480) (height 320))
     ((macroblock 0) (subblock 0) (block_number 0) (x_pos 0) (y_pos 0))
     ((block_number 0) (max_reconstructed_diff 1)
@@ -370,7 +370,9 @@ let%expect_test "" =
     │                  ││╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨│
     │clear             ││╥                                                                                                 │
     │                  ││╨─────────────────────────────────────────────────────────────────────────────────────────────────│
-    │start             ││       ╥                                  ╥                                 ╥                     │
+    │start_codeblock_de││       ╥                                  ╥                                 ╥                     │
+    │                  ││───────╨──────────────────────────────────╨─────────────────────────────────╨─────────────────────│
+    │start_idct        ││       ╥                                  ╥                                 ╥                     │
     │                  ││───────╨──────────────────────────────────╨─────────────────────────────────╨─────────────────────│
     │                  ││╥╥╥───────────────────────────────────────────────────────────────────────────────────────────────│
     │hdr$table_class   ││║║║ 0                                                                                             │
@@ -411,7 +413,11 @@ let%expect_test "" =
     │                  ││───╨╨╨╨╨──────────────────────────────────────────────────────────────────────────────────────────│
     │element_write     ││   ╥───╥                                                                                          │
     │                  ││───╨   ╨──────────────────────────────────────────────────────────────────────────────────────────│
-    │luma_or_chroma    ││                                                                                                  │
+    │                  ││──────────────────────────────────────────────────────────────────────────────────────────────────│
+    │dc_table_select   ││ 0                                                                                                │
+    │                  ││──────────────────────────────────────────────────────────────────────────────────────────────────│
+    │                  ││──────────────────────────────────────────────────────────────────────────────────────────────────│
+    │qnt_table_select  ││ 0                                                                                                │
     │                  ││──────────────────────────────────────────────────────────────────────────────────────────────────│
     │                  ││──────────────────────────────────────────┬───────────────────────────────────────────────────────│
     │dc_pred_in        ││ 000                                      │014                                                    │
@@ -433,11 +439,5 @@ let%expect_test "" =
     │dc_pred_out       ││ 000   ║ 014                                                                ║ 00E                 │
     │                  ││───────╨────────────────────────────────────────────────────────────────────╨─────────────────────│
     │jpeg_ready        ││       ╥╥                                 ╥                                 ╥                     │
-    │                  ││───────╨╨─────────────────────────────────╨─────────────────────────────────╨─────────────────────│
-    │done_             ││───────╥                                  ╥                                 ╥                     │
-    │                  ││       ╨──────────────────────────────────╨─────────────────────────────────╨─────────────────────│
-    │                  ││───────╥──────────────────────────────────────────────────────────────────────────────────────────│
-    │bsread$STATE      ││ 0     ║ 2                                                                                        │
-    │                  ││───────╨──────────────────────────────────────────────────────────────────────────────────────────│
     └──────────────────┘└──────────────────────────────────────────────────────────────────────────────────────────────────┘ |}]
 ;;

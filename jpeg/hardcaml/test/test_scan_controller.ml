@@ -2,7 +2,7 @@ open! Core
 open Hardcaml
 open Hardcaml_jpeg
 open Hardcaml_waveterm
-module Scan_controller = Scan_controller.New
+module Scan_controller = Scan_controller.Core
 module Sim = Cyclesim.With_interface (Scan_controller.I) (Scan_controller.O)
 
 let display_rules =

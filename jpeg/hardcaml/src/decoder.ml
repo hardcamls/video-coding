@@ -36,10 +36,13 @@ let create scope (i : _ I.t) =
     Decoder_datapath.hierarchical
       scope
       { Decoder_datapath.I.clocking = i.clocking
-      ; start = controller.starts.codeblock_decoder
+      ; start_codeblock_decoder = controller.starts.codeblock_decoder
+      ; start_idct = controller.starts.idct
       ; dht = bytestream.markers.dht
       ; dqt = bytestream.markers.dqt
-      ; luma_or_chroma = controller.luma_or_chroma
+      ; ac_table_select = controller.ac_table_select
+      ; dc_table_select = controller.dc_table_select
+      ; qnt_table_select = controller.qnt_table_select
       ; dc_pred_in = controller.dc_pred_out
       ; bits = bitstream.bits
       ; bits_valid = bitstream.bits_valid
