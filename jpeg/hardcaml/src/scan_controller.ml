@@ -173,7 +173,6 @@ module New = struct
       ; start : 'a
       ; sof : 'a Markers.Sof.Fields.t [@rtlprefix "sof$"]
       ; sos : 'a Markers.Sos.Fields.t [@rtlprefix "sos$"]
-      ; done_ : 'a Ctrl.t [@rtlsuffix "_done"]
       ; dc_pred_in : 'a [@bits 12]
       ; dc_pred_write : 'a
       ; all_done : 'a
@@ -183,8 +182,7 @@ module New = struct
 
   module O = struct
     type 'a t =
-      { start : 'a Ctrl.t [@rtlsuffix "_start"]
-      ; done_ : 'a
+      { done_ : 'a
       ; dc_pred_out : 'a [@bits 12]
       ; luma_or_chroma : 'a
       ; x_pos : 'a [@bits 16]
@@ -449,8 +447,7 @@ module New = struct
                 ] )
             ]
         ]);
-    { O.start = { codeblock_decoder = gnd; idct = gnd; output = gnd }
-    ; done_ = sm.is Headers
+    { O.done_ = sm.is Headers
     ; dc_pred_out = zero 12
     ; luma_or_chroma = gnd
     ; x_pos = scan_r.x_pos.value @: zero 3
@@ -458,5 +455,114 @@ module New = struct
     ; scan_index = scan_address.value
     ; starter = starter.value
     }
+  ;;
+
+  let hierarchical scope =
+    let module Hier = Hierarchy.In_scope (I) (O) in
+    Hier.hierarchical ~scope ~name:"ctrl" create
+  ;;
+end
+
+module With_pipeline_coontrol = struct
+  module I = struct
+    type 'a t =
+      { clocking : 'a Clocking.t
+      ; start : 'a
+      ; sof : 'a Markers.Sof.Fields.t [@rtlprefix "sof$"]
+      ; sos : 'a Markers.Sos.Fields.t [@rtlprefix "sos$"]
+      ; dc_pred_in : 'a [@bits 12]
+      ; dc_pred_write : 'a
+      ; dones : 'a Ctrl.t [@rtlsuffix "_done"]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  module O = struct
+    type 'a t =
+      { done_ : 'a
+      ; dc_pred_out : 'a [@bits 12]
+      ; luma_or_chroma : 'a
+      ; x_pos : 'a [@bits 16]
+      ; y_pos : 'a [@bits 16]
+      ; scan_index : 'a [@bits New.log_max_scans]
+      ; starts : 'a Ctrl.t [@rtlsuffix "_start"]
+      }
+    [@@deriving sexp_of, hardcaml]
+  end
+
+  module State = struct
+    type t =
+      | Start
+      | Process
+      | Flush
+    [@@deriving sexp_of, compare, enumerate]
+  end
+
+  let create scope (i : _ I.t) =
+    let ( -- ) = Scope.naming scope in
+    let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
+    ignore (sm.current -- "STATE" : Signal.t);
+    let starter = Clocking.Var.reg i.clocking ~width:1 in
+    let start_pipe = Clocking.Var.reg i.clocking ~width:3 in
+    let all_done =
+      let dones = reduce ~f:( &: ) (Ctrl.to_list i.dones) in
+      dones &: ~:(starter.value)
+    in
+    let ctrl =
+      New.hierarchical
+        scope
+        { New.I.clocking = i.clocking
+        ; start = i.start
+        ; sof = i.sof
+        ; sos = i.sos
+        ; dc_pred_in = i.dc_pred_in
+        ; dc_pred_write = i.dc_pred_write
+        ; all_done
+        }
+    in
+    Always.(
+      compile
+        [ sm.switch
+            [ Start, [ when_ i.start [ start_pipe <--. 0; sm.set_next Process ] ]
+            ; ( Process
+              , [ when_
+                    all_done
+                    [ when_
+                        ctrl.starter
+                        [ start_pipe <-- start_pipe.value.:[1, 0] @: vdd
+                        ; starter <-- vdd
+                        ]
+                    ; when_ ctrl.done_ [ starter <-- gnd; sm.set_next Flush ]
+                    ]
+                ] )
+            ; ( Flush
+              , [ when_
+                    all_done
+                    [ start_pipe <-- start_pipe.value.:[1, 0] @: gnd
+                    ; starter <-- vdd
+                    ; when_
+                        (start_pipe.value ==:. 0)
+                        [ starter <-- gnd; sm.set_next Start ]
+                    ]
+                ] )
+            ]
+        ]);
+    { O.done_ = sm.is Start
+    ; dc_pred_out = ctrl.dc_pred_out
+    ; luma_or_chroma = ctrl.luma_or_chroma
+    ; x_pos = ctrl.x_pos
+    ; y_pos = ctrl.y_pos
+    ; scan_index = ctrl.scan_index
+    ; starts =
+        { codeblock_decoder = start_pipe.value.:(0) &: starter.value
+        ; idct = start_pipe.value.:(1) &: starter.value
+        ; output = start_pipe.value.:(2) &: starter.value
+        }
+    }
+  ;;
+
+  let hierarchical scope =
+    let module Hier = Hierarchy.In_scope (I) (O) in
+    Hier.hierarchical ~scope ~name:"ctrl" create
   ;;
 end

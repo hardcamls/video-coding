@@ -26,6 +26,7 @@ end
 
 module Bytestream = Bytestream_decoder.With_fifo16
 module Bitstream = Bitstream_reader
+module Scan_controller = Scan_controller.With_pipeline_coontrol
 
 let create scope (i : _ I.t) =
   let bytestream = Bytestream.O.Of_signal.wires () in
@@ -35,7 +36,7 @@ let create scope (i : _ I.t) =
     Decoder_datapath.hierarchical
       scope
       { Decoder_datapath.I.clocking = i.clocking
-      ; start = controller.start.codeblock_decoder
+      ; start = controller.starts.codeblock_decoder
       ; dht = bytestream.markers.dht
       ; dqt = bytestream.markers.dqt
       ; luma_or_chroma = controller.luma_or_chroma
@@ -74,17 +75,19 @@ let create scope (i : _ I.t) =
        scope
        { Scan_controller.I.clocking = i.clocking
        ; start = bytestream.decoder_start
-       ; done_ =
+       ; sof = bytestream.markers.sof
+       ; sos = bytestream.markers.sos
+       ; dc_pred_in = datapath.dc_pred_out
+       ; dc_pred_write = datapath.dc_pred_write
+       ; dones =
            { codeblock_decoder = datapath.done_
            ; idct = datapath.done_
            ; output = i.output_done
            }
-       ; dc_pred_in = datapath.dc_pred_out
-       ; dc_pred_write = datapath.dc_pred_write
        });
   { O.pixel = datapath.pixel
   ; jpeg_ready = bytestream.jpeg_ready
-  ; start_output = controller.start.output
+  ; start_output = controller.starts.output
   }
 ;;
 
