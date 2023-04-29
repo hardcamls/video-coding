@@ -133,7 +133,12 @@ let%expect_test "test decoder" =
   [%expect
     {|
     ((width 480) (height 320))
-    (Failed (e "Took too long to decode block"))
+    ((macroblock 0) (subblock 0) (block_number 0) (x_pos 0) (y_pos 0))
+    ((macroblock 0) (subblock 1) (block_number 1) (x_pos 0) (y_pos 0))
+    ((macroblock 0) (subblock 2) (block_number 2) (x_pos 0) (y_pos 0))
+    ((macroblock 0) (subblock 3) (block_number 3) (x_pos 0) (y_pos 0))
+    ((macroblock 0) (subblock 4) (block_number 4) (x_pos 0) (y_pos 0))
+    ((macroblock 0) (subblock 5) (block_number 5) (x_pos 0) (y_pos 0))
     ┌Signals───────────┐┌Waves─────────────────────────────────────────────────────────────────────────────────────────────┐
     │clock             ││┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌─│
     │                  ││   └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘ │

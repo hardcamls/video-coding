@@ -413,6 +413,7 @@ module New = struct
                 ] )
             ; ( Blocks
               , [ component_address <-- scan_r.component_index.value
+                ; when_ i.dc_pred_write [ scan_r.dc_pred <-- i.dc_pred_in ]
                 ; when_
                     (i.all_done &: ~:(starter.value))
                     [ starter <-- vdd
@@ -448,8 +449,8 @@ module New = struct
             ]
         ]);
     { O.done_ = sm.is Headers
-    ; dc_pred_out = zero 12
-    ; luma_or_chroma = gnd
+    ; dc_pred_out = scan_r.dc_pred.value
+    ; luma_or_chroma = scan_r.dc.value.:(0) (* XX wow this aint right *)
     ; x_pos = scan_r.x_pos.value @: zero 3
     ; y_pos = scan_r.y_pos.value @: zero 3
     ; scan_index = scan_address.value
@@ -522,7 +523,8 @@ module With_pipeline_coontrol = struct
     in
     Always.(
       compile
-        [ sm.switch
+        [ starter <-- gnd
+        ; sm.switch
             [ Start, [ when_ i.start [ start_pipe <--. 0; sm.set_next Process ] ]
             ; ( Process
               , [ when_
