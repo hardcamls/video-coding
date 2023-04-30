@@ -74,6 +74,10 @@ let rle (block : Block.t) =
 
 let size value = if value = 0 then 0 else Int.floor_log2 (Int.abs value) + 1
 
+let magnitude ~size value =
+  if value >= 0 then value land ((1 lsl size) - 1) else (value - 1) land ((1 lsl size) - 1)
+;;
+
 let encode_bits
     (block : Block.t)
     ~(dc_table : Tables.dc_coef array)

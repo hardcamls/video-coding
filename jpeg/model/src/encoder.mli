@@ -26,6 +26,7 @@ val fdct : Block.t -> unit
 val quant : Block.t -> table:int array -> unit
 val rle : Block.t -> unit
 val size : int -> int
+val magnitude : size:int -> int -> int
 
 val encode_bits
   :  Block.t
