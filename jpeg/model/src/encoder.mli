@@ -25,3 +25,10 @@ val level_shifted_input_block : Plane.t -> Block.t -> x_pos:int -> y_pos:int -> 
 val fdct : Block.t -> unit
 val quant : Block.t -> table:int array -> unit
 val rle : Block.t -> unit
+val size : int -> int
+
+val encode_bits
+  :  Block.t
+  -> dc_table:Tables.dc_coef array
+  -> ac_table:Tables.ac_coef array array
+  -> [ `dc of int | `ac of int * int | `eob ] Tables.coef list

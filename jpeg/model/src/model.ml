@@ -88,9 +88,9 @@ let create_code_table lengths (values : int array array) =
 
 let mag' cat code =
   if code land (1 lsl (cat - 1)) <> 0
-  then (* +codee coeff *)
+  then (* +ve coeff *)
     code
-  else (* -codee coeff *)
+  else (* -ve coeff *)
     (code lor (-1 lsl cat)) + 1
 ;;
 

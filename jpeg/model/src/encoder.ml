@@ -71,3 +71,28 @@ let rle (block : Block.t) =
   block.rle <- { run = 0; value = dc - block.dc_pred } :: rle 0 1;
   block.dc_pred <- dc
 ;;
+
+let size value = if value = 0 then 0 else Int.floor_log2 (Int.abs value) + 1
+
+let encode_bits
+    (block : Block.t)
+    ~(dc_table : Tables.dc_coef array)
+    ~(ac_table : Tables.ac_coef array array)
+  =
+  let rec ac (c : Rle.t list) =
+    match c with
+    | [] -> []
+    | [ { run = _; value = 0 } ] ->
+      (* end of block *) [ { (ac_table.(0).(0)) with data = `eob } ]
+    | { run; value } :: tl ->
+      let rec runs run =
+        if run >= 16
+        then { (ac_table.(15).(0)) with data = `ac (15, 0) } :: runs (run - 16)
+        else [ { (ac_table.(run).(size value)) with data = `ac (run, value) } ]
+      in
+      runs run @ ac tl
+  in
+  match block.rle with
+  | { run = 0; value } :: tl -> { (dc_table.(size value)) with data = `dc value } :: ac tl
+  | _ -> failwith "no or invalid dc coef?"
+;;
