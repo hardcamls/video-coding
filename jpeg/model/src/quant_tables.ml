@@ -135,3 +135,13 @@ let chroma =
    ; 99
   |]
 ;;
+
+let clip x min max = if x < min then min else if x > max then max else x
+
+let scale table q =
+  let q = clip q 1 100 in
+  let s = if q < 50 then 5000 / q else 200 - (2 * q) in
+  Array.map table ~f:(fun d ->
+      let d = ((d * s) + 50) / 100 in
+      clip d 1 255)
+;;
