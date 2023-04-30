@@ -420,3 +420,44 @@ module Lut = struct
     { lut; max_bits }
   ;;
 end
+
+module Encoder = struct
+  let dc_table (dc : dc coef list) =
+    List.sort
+      dc
+      ~compare:(fun
+                 { length = _; bits = _; data = data0 }
+                 { length = _; bits = _; data = data1 }
+               -> Int.compare data0 data1)
+    |> Array.of_list
+  ;;
+
+  let ac_table (ac : ac coef list) =
+    let ac =
+      List.sort
+        ac
+        ~compare:(fun
+                   { length = _; bits = _; data = { run = run0; size = size0 } }
+                   { length = _; bits = _; data = { run = run1; size = size1 } }
+                 -> [%compare: int * int] (run0, size0) (run1, size1))
+    in
+    let by_run =
+      List.group
+        ac
+        ~break:(fun
+                 { length = _; bits = _; data = { run = run0; size = _ } }
+                 { length = _; bits = _; data = { run = run1; size = _ } }
+               -> run0 <> run1)
+    in
+    List.map by_run ~f:(fun l ->
+        (* If there is no [0] size, add a fake one back in to normalize indexing. 
+        
+          run=0 and run=15 implicitly have one and are used for end of block and extended 0 runs.
+        *)
+        match l with
+        | [] -> failwith ""
+        | { length = _; bits = _; data = { run = _; size = 0 } } :: _ -> Array.of_list l
+        | _ -> Array.of_list ({ length = 0; bits = 0; data = { run = 0; size = 0 } } :: l))
+    |> Array.of_list
+  ;;
+end

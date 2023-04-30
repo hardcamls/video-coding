@@ -1,5 +1,7 @@
 open Base
 
+(** {2 Default luma and chroma tables.} *)
+
 type 'a coef =
   { length : int
   ; bits : int
@@ -46,4 +48,13 @@ module Lut : sig
   val create : 'a coef list -> 'a t
   val lut : 'a t -> 'a code option array
   val max_bits : 'a t -> int
+end
+
+(*** Tables indexed by run and size used for encoding. *)
+module Encoder : sig
+  (** DC coefs sorted by size *)
+  val dc_table : dc coef list -> dc coef array
+
+  (*** AC coefs sorted by run and size *)
+  val ac_table : ac coef list -> ac coef array array
 end
