@@ -54,9 +54,14 @@ let level_shifted_input_block plane (block : Block.t) ~x_pos ~y_pos =
 
 let fdct (block : Block.t) = Dct.Chen.forward_8x8 block.fdct
 
+let quant_and_scale fdct qnt =
+  (* the forward chen transform is scaled by 4. *)
+  if fdct < 0 then (fdct - (qnt * 2)) / (qnt * 4) else (fdct + (qnt * 2)) / (qnt * 4)
+;;
+
 let quant (block : Block.t) ~table =
   for i = 0 to 63 do
-    block.quant.(i) <- (block.fdct.(i) + (table.(i) / 2)) / table.(i)
+    block.quant.(Zigzag.forward.(i)) <- quant_and_scale block.fdct.(i) table.(i)
   done
 ;;
 
@@ -64,9 +69,11 @@ let rle (block : Block.t) =
   let quant = block.quant in
   let rec rle run pos =
     if pos = 63
-    then [ { Rle.run; value = quant.(Zigzag.forward.(pos)) } ]
+    then (
+      let value = quant.(pos) in
+      [ { Rle.run; value } ])
     else (
-      let value = quant.(Zigzag.forward.(pos)) in
+      let value = quant.(pos) in
       if value <> 0 then { run; value } :: rle 0 (pos + 1) else rle (run + 1) (pos + 1))
   in
   let dc = quant.(0) in
@@ -89,22 +96,29 @@ let write_bits
   let write_dc value =
     let size = size value in
     let code = dc_table.(size) in
+    let magnitude = magnitude ~size value in
+    (* Stdio.print_s [%message (size : int) (code : Tables.dc_coef) (magnitude : int)]; *)
     Writer.put_bits writer ~stuffing:true ~value:code.bits ~bits:code.length;
-    Writer.put_bits writer ~stuffing:true ~value:(magnitude ~size value) ~bits:size
+    Writer.put_bits writer ~stuffing:true ~value:magnitude ~bits:size
   in
   let write_ac run value =
     let size = size value in
     let code = ac_table.(run).(size) in
+    let magnitude = magnitude ~size value in
+    (* Stdio.print_s
+      [%message (run : int) (size : int) (code : Tables.ac_coef) (magnitude : int)]; *)
     Writer.put_bits writer ~stuffing:true ~value:code.bits ~bits:code.length;
-    Writer.put_bits writer ~stuffing:true ~value:(magnitude ~size value) ~bits:size
+    Writer.put_bits writer ~stuffing:true ~value:magnitude ~bits:size
   in
-  let rec ac (c : Rle.t list) =
+  let rec ac (c : Rle.t list) pos =
     match c with
-    | [] -> ()
-    | [ { run = _; value = 0 } ] ->
+    | [] -> assert (pos = 64)
+    | [ { run; value = 0 } ] ->
       (* end of block *)
-      write_ac 0 0
+      write_ac 0 0;
+      assert (pos + run + 1 = 64)
     | { run; value } :: tl ->
+      assert (not (run = 0 && value = 0));
       let rec runs run =
         if run >= 16
         then (
@@ -113,12 +127,12 @@ let write_bits
         else write_ac run value
       in
       runs run;
-      ac tl
+      ac tl (pos + run + 1)
   in
   match block.rle with
   | { run = 0; value } :: tl ->
     write_dc value;
-    ac tl
+    ac tl 1
   | _ -> failwith "no or invalid dc coef?"
 ;;
 
@@ -241,12 +255,29 @@ let write_headers
   write_sos writer
 ;;
 
+let dump_block
+    ~x_pos
+    ~y_pos
+    ({ level_shifted_pixels; fdct; quant; dc_pred; rle } : Block.t)
+  =
+  Stdio.print_s
+    [%message
+      (x_pos : int)
+        (y_pos : int)
+        (level_shifted_pixels : Util.pixel_block)
+        (fdct : Util.coef_block)
+        (quant : Util.coef_block)
+        (dc_pred : int)
+        (rle : Rle.t list)]
+;;
+
 (* Basic 420 encoder.  We'll generalize over components and scans shortly. *)
 let encode_420 ~frame ~quality ~writer =
   let width = Frame.width frame in
   let height = Frame.height frame in
   assert (width % 16 = 0);
   assert (height % 16 = 0);
+  Stdio.print_s [%message (width : int) "x" (height : int)];
   let blocks = Array.init 3 ~f:(fun _ -> Block.create ()) in
   let qnt_luma = Quant_tables.scale Quant_tables.luma quality in
   let qnt_chroma = Quant_tables.scale Quant_tables.chroma quality in
@@ -264,22 +295,25 @@ let encode_420 ~frame ~quality ~writer =
   let ac_luma = Tables.Encoder.ac_table Tables.Default.ac_luma in
   let dc_chroma = Tables.Encoder.dc_table Tables.Default.dc_chroma in
   let ac_chroma = Tables.Encoder.ac_table Tables.Default.ac_chroma in
-  for y_mb = 0 to height / 16 do
-    for x_mb = 0 to width / 16 do
+  for y_mb = 0 to (height / 16) - 1 do
+    for x_mb = 0 to (width / 16) - 1 do
       (* luma *)
       for y_subblk = 0 to 1 do
         for x_subblk = 0 to 1 do
           let x_blk = (x_mb * 2) + x_subblk in
           let y_blk = (y_mb * 2) + y_subblk in
+          let x_pos = x_blk * 8 in
+          let y_pos = y_blk * 8 in
           encode_block
             (Frame.y frame)
             blocks.(0)
             ~writer
-            ~x_pos:(x_blk * 8)
-            ~y_pos:(y_blk * 8)
+            ~x_pos
+            ~y_pos
             ~dc_table:dc_luma
             ~ac_table:ac_luma
-            ~qnt_table:qnt_luma
+            ~qnt_table:qnt_luma;
+          dump_block ~x_pos ~y_pos blocks.(0)
         done
       done;
       (* chroma *)
@@ -292,6 +326,7 @@ let encode_420 ~frame ~quality ~writer =
         ~dc_table:dc_chroma
         ~ac_table:ac_chroma
         ~qnt_table:qnt_chroma;
+      dump_block ~x_pos:(x_mb * 8) ~y_pos:(y_mb * 8) blocks.(1);
       encode_block
         (Frame.v frame)
         blocks.(2)
@@ -300,7 +335,8 @@ let encode_420 ~frame ~quality ~writer =
         ~y_pos:(y_mb * 8)
         ~dc_table:dc_chroma
         ~ac_table:ac_chroma
-        ~qnt_table:qnt_chroma
+        ~qnt_table:qnt_chroma;
+      dump_block ~x_pos:(x_mb * 8) ~y_pos:(y_mb * 8) blocks.(2)
     done
   done;
   Writer.flush_with_1s writer ~stuffing:true;

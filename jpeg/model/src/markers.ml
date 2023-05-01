@@ -134,17 +134,17 @@ module Sos = struct
     for i = 0 to t.number_of_image_components - 1 do
       Scan_component.encode writer t.scan_components.(i)
     done;
-    Writer.put_bits writer ~stuffing:false ~bits:16 ~value:t.start_of_predictor_selection;
-    Writer.put_bits writer ~stuffing:false ~bits:16 ~value:t.end_of_predictor_selection;
+    Writer.put_bits writer ~stuffing:false ~bits:8 ~value:t.start_of_predictor_selection;
+    Writer.put_bits writer ~stuffing:false ~bits:8 ~value:t.end_of_predictor_selection;
     Writer.put_bits
       writer
       ~stuffing:false
-      ~bits:16
+      ~bits:4
       ~value:t.successive_approximation_bit_high;
     Writer.put_bits
       writer
       ~stuffing:false
-      ~bits:16
+      ~bits:4
       ~value:t.successive_approximation_bit_low
   ;;
 end

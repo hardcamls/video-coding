@@ -23,8 +23,6 @@ module Component : sig
   type t [@@deriving sexp_of]
 
   module Summary : sig
-    type coef_block = int array [@@deriving sexp_of]
-    type pixel_block = int array [@@deriving sexp_of]
     type nonrec t = t [@@deriving sexp_of]
   end
 

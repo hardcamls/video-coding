@@ -9,6 +9,7 @@ include struct
   module Frame = Frame
   module Model = Decoder
   module Reader = Bitstream_reader
+  module Sexp_util = Util
 end
 (* XX decoder bug occurs at block=1875 with large reconstructed diff (38).  
    Assuming a bytestream problem as this doesn't happen in the accelerator design. 
@@ -112,7 +113,7 @@ let test ?(waves = true) ?(error_tolerance = 2) ?num_blocks_to_decode jpeg =
             [%message
               (block_number : int)
                 (max_reconstructed_diff : int)
-                (pixels : Model.Component.Summary.pixel_block)
+                (pixels : Sexp_util.pixel_block)
                 (comp : Model.Component.Summary.t)];
         decode_and_compare_with_model (Sequence.tl_eagerly_exn model) (block_number + 1))
   in

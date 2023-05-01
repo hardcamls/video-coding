@@ -2,7 +2,16 @@ open Core
 open Hardcaml
 open Hardcaml_waveterm
 open Hardcaml_jpeg
-open Hardcaml_jpeg_model
+
+include struct
+  open Hardcaml_jpeg_model
+  module Marker_code = Marker_code
+  module Decoder = Decoder
+  module Reader = Bitstream_reader
+  module Frame = Frame
+  module Sexp_util = Util
+end
+
 module Accl = Decoder_accelerator
 module Sim = Cyclesim.With_interface (Accl.I) (Accl.O)
 
@@ -25,7 +34,7 @@ let get_headers_and_model_and_bits jpeg =
   let headers = Decoder.Header.decode bits in
   let decoder = Decoder.init headers bits in
   let model = Decoder.For_testing.Sequenced.decode decoder in
-  let bits = Bitstream_reader.From_string.get_buffer bits in
+  let bits = Reader.From_string.get_buffer bits in
   headers, model, get_entropy_coded_segment bits
 ;;
 
@@ -161,7 +170,7 @@ let test ?(waves = true) ?(error_tolerance = 2) ?num_blocks_to_decode jpeg =
             [%message
               (block_number : int)
                 (max_reconstructed_diff : int)
-                (pixels : Decoder.Component.Summary.pixel_block)
+                (pixels : Sexp_util.pixel_block)
                 (comp : Decoder.Component.Summary.t)];
         decode_and_compare_with_model (Sequence.tl_eagerly_exn model) (block_number + 1))
   in

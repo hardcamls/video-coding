@@ -70,8 +70,7 @@ let%expect_test "example header" =
       "00000230  a7 a8 a9 aa b2 b3 b4 b5  b6 b7 b8 b9 ba c2 c3 c4  |................|"
       "00000240  c5 c6 c7 c8 c9 ca d2 d3  d4 d5 d6 d7 d8 d9 da e2  |................|"
       "00000250  e3 e4 e5 e6 e7 e8 e9 ea  f2 f3 f4 f5 f6 f7 f8 f9  |................|"
-      "00000260  fa ff da 00 0c 03 01 00  02 11 03 11 00 00 00 00  |................|"
-      "00000270  00 00 00 00                                       |....|"))
+      "00000260  fa ff da 00 0c 03 01 00  02 11 03 11 00 00 00     |...............|"))
     (header
      ((frame
        (((length 17) (sample_precision 8) (width 320) (height 480)
