@@ -10,11 +10,16 @@ end
 
 module Block : sig
   type t =
-    { level_shifted_pixels : int array
+    { input_pixels : int array
     ; fdct : int array
     ; quant : int array
     ; mutable dc_pred : int
     ; mutable rle : Rle.t list
+    ; (* XX For debugging *)
+      dequant : int array
+    ; idct : int array
+    ; recon : int array
+    ; error : int array
     }
   [@@deriving sexp_of]
 

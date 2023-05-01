@@ -61,8 +61,8 @@ module Sof = struct
     let length = 2 + 6 + (t.number_of_components * Component.bytes) in
     Writer.put_bits writer ~stuffing:false ~bits:16 ~value:length;
     Writer.put_bits writer ~stuffing:false ~bits:8 ~value:t.sample_precision;
-    Writer.put_bits writer ~stuffing:false ~bits:16 ~value:t.width;
     Writer.put_bits writer ~stuffing:false ~bits:16 ~value:t.height;
+    Writer.put_bits writer ~stuffing:false ~bits:16 ~value:t.width;
     Writer.put_bits writer ~stuffing:false ~bits:8 ~value:t.number_of_components;
     for i = 0 to t.number_of_components - 1 do
       Component.encode writer t.components.(i)
@@ -177,7 +177,7 @@ module Dqt = struct
         writer
         ~stuffing:false
         ~bits:t.element_precision
-        ~value:t.elements.(Zigzag.inverse.(i))
+        ~value:t.elements.(i)
     done
   ;;
 end

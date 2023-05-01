@@ -23,20 +23,29 @@ end
 
 module Block = struct
   type t =
-    { level_shifted_pixels : int array
+    { input_pixels : int array
     ; fdct : int array
     ; quant : int array
     ; mutable dc_pred : int
     ; mutable rle : Rle.t list
+    ; (* XX For debugging *)
+      dequant : int array
+    ; idct : int array
+    ; recon : int array
+    ; error : int array
     }
   [@@deriving sexp_of]
 
   let create () =
-    { level_shifted_pixels = Array.create ~len:64 0
+    { input_pixels = Array.create ~len:64 0
     ; fdct = Array.create ~len:64 0
     ; quant = Array.create ~len:64 0
     ; dc_pred = 0
     ; rle = []
+    ; dequant = Array.create ~len:64 0
+    ; idct = Array.create ~len:64 0
+    ; recon = Array.create ~len:64 0
+    ; error = Array.create ~len:64 0
     }
   ;;
 end
@@ -45,14 +54,15 @@ let level_shifted_input_block plane (block : Block.t) ~x_pos ~y_pos =
   for y = 0 to 7 do
     for x = 0 to 7 do
       let k = (y * 8) + x in
-      let p = Char.to_int Plane.(plane.![x + x_pos, y + y_pos]) - 128 in
-      block.level_shifted_pixels.(k) <- p;
-      block.fdct.(k) <- p
+      let p = Char.to_int Plane.(plane.![x + x_pos, y + y_pos]) in
+      block.input_pixels.(k) <- p;
+      block.fdct.(k) <- p - 128
     done
   done
 ;;
 
 let fdct (block : Block.t) = Dct.Chen.forward_8x8 block.fdct
+let idct (block : Block.t) = Dct.Chen.inverse_8x8 block.idct
 
 let quant_and_scale fdct qnt =
   (* the forward chen transform is scaled by 4. *)
@@ -61,7 +71,23 @@ let quant_and_scale fdct qnt =
 
 let quant (block : Block.t) ~table =
   for i = 0 to 63 do
-    block.quant.(Zigzag.forward.(i)) <- quant_and_scale block.fdct.(i) table.(i)
+    block.quant.(Zigzag.forward.(i))
+      <- quant_and_scale block.fdct.(i) table.(Zigzag.forward.(i))
+  done
+;;
+
+let dequant (block : Block.t) ~table =
+  for i = 0 to 63 do
+    let c = block.quant.(i) * table.(i) in
+    block.dequant.(Zigzag.inverse.(i)) <- c;
+    block.idct.(Zigzag.inverse.(i)) <- c
+  done
+;;
+
+let recon (block : Block.t) =
+  for i = 0 to 63 do
+    block.recon.(i) <- Int.max 0 (Int.min 255 (block.idct.(i) + 128));
+    block.error.(i) <- Int.abs (block.recon.(i) - block.input_pixels.(i))
   done
 ;;
 
@@ -141,7 +167,11 @@ let encode_block plane block ~writer ~x_pos ~y_pos ~dc_table ~ac_table ~qnt_tabl
   fdct block;
   quant block ~table:qnt_table;
   rle block;
-  write_bits block ~writer ~dc_table ~ac_table
+  write_bits block ~writer ~dc_table ~ac_table;
+  (* for debugging *)
+  dequant block ~table:qnt_table;
+  idct block;
+  recon block
 ;;
 
 let write_marker_code writer code =
@@ -256,19 +286,26 @@ let write_headers
 ;;
 
 let dump_block
+    ~block_no
     ~x_pos
     ~y_pos
-    ({ level_shifted_pixels; fdct; quant; dc_pred; rle } : Block.t)
+    ({ input_pixels; fdct; quant; dc_pred; rle; dequant; idct; recon; error } : Block.t)
   =
   Stdio.print_s
     [%message
       (x_pos : int)
         (y_pos : int)
-        (level_shifted_pixels : Util.pixel_block)
+        (block_no : int ref)
+        (input_pixels : Util.pixel_block)
         (fdct : Util.coef_block)
         (quant : Util.coef_block)
         (dc_pred : int)
-        (rle : Rle.t list)]
+        (rle : Rle.t list)
+        (dequant : Util.coef_block)
+        (idct : Util.coef_block)
+        (recon : Util.pixel_block)
+        (error : Util.pixel_block)];
+  Int.incr block_no
 ;;
 
 (* Basic 420 encoder.  We'll generalize over components and scans shortly. *)
@@ -295,6 +332,7 @@ let encode_420 ~frame ~quality ~writer =
   let ac_luma = Tables.Encoder.ac_table Tables.Default.ac_luma in
   let dc_chroma = Tables.Encoder.dc_table Tables.Default.dc_chroma in
   let ac_chroma = Tables.Encoder.ac_table Tables.Default.ac_chroma in
+  let block_no = ref 0 in
   for y_mb = 0 to (height / 16) - 1 do
     for x_mb = 0 to (width / 16) - 1 do
       (* luma *)
@@ -313,7 +351,7 @@ let encode_420 ~frame ~quality ~writer =
             ~dc_table:dc_luma
             ~ac_table:ac_luma
             ~qnt_table:qnt_luma;
-          dump_block ~x_pos ~y_pos blocks.(0)
+          dump_block ~block_no ~x_pos ~y_pos blocks.(0)
         done
       done;
       (* chroma *)
@@ -326,7 +364,7 @@ let encode_420 ~frame ~quality ~writer =
         ~dc_table:dc_chroma
         ~ac_table:ac_chroma
         ~qnt_table:qnt_chroma;
-      dump_block ~x_pos:(x_mb * 8) ~y_pos:(y_mb * 8) blocks.(1);
+      dump_block ~block_no ~x_pos:(x_mb * 8) ~y_pos:(y_mb * 8) blocks.(1);
       encode_block
         (Frame.v frame)
         blocks.(2)
@@ -336,7 +374,7 @@ let encode_420 ~frame ~quality ~writer =
         ~dc_table:dc_chroma
         ~ac_table:ac_chroma
         ~qnt_table:qnt_chroma;
-      dump_block ~x_pos:(x_mb * 8) ~y_pos:(y_mb * 8) blocks.(2)
+      dump_block ~block_no ~x_pos:(x_mb * 8) ~y_pos:(y_mb * 8) blocks.(2)
     done
   done;
   Writer.flush_with_1s writer ~stuffing:true;

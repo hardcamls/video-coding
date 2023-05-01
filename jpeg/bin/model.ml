@@ -80,8 +80,8 @@ let command_encode_frame =
       in
       fun () ->
         let frame = Frame.create ~chroma_subsampling:C420 ~width ~height in
+        In_channel.with_file yuv ~f:(Frame.input frame);
         let writer = Bitstream_writer.create () in
-        In_channel.with_file yuv ~f:(fun yuv -> Frame.input frame yuv);
         Encoder.encode_420 ~frame ~quality ~writer;
         Out_channel.write_all bits ~data:(Bitstream_writer.get_buffer writer)]
 ;;
