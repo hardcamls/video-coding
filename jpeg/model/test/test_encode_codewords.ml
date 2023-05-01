@@ -3,7 +3,7 @@ open! Core
 include struct
   open Hardcaml_jpeg_model
   module Encoder = Encoder
-  module Model = Model
+  module Decoder = Decoder
   module Tables = Tables
 end
 
@@ -35,7 +35,7 @@ let%expect_test "test magnitude encoding" =
   let mag value =
     let size = Encoder.size value in
     let emag = Encoder.magnitude ~size value in
-    let dmag = Model.For_testing.mag size emag in
+    let dmag = Decoder.For_testing.mag size emag in
     print_s [%message (value : int) (size : int) (emag : int) (dmag : int)]
   in
   for i = -15 to 15 do

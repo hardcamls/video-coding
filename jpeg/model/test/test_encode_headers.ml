@@ -7,7 +7,7 @@ include struct
   module Tables = Tables
   module Writer = Bitstream_writer
   module Reader = Bitstream_reader
-  module Model = Model
+  module Decoder = Decoder
 end
 
 let%expect_test "example header" =
@@ -27,8 +27,8 @@ let%expect_test "example header" =
     ~qnt_chroma;
   let buffer = Writer.get_buffer writer in
   print_s [%message (buffer : String.Hexdump.t)];
-  let header = Model.Header.decode (Reader.From_string.create buffer) in
-  print_s [%message (header : Model.Header.t)];
+  let header = Decoder.Header.decode (Reader.From_string.create buffer) in
+  print_s [%message (header : Decoder.Header.t)];
   [%expect
     {|
     (buffer

@@ -11,7 +11,7 @@ val find_nth_marker_exn : n:int -> marker_code:int -> String.t -> String.t
     stuffed bytes. *)
 val headers_and_entropy_coded_segment
   :  string
-  -> Hardcaml_jpeg_model.Model.Header.t * String.t
+  -> Hardcaml_jpeg_model.Decoder.Header.t * String.t
 
 val remove_stuffing_bytes : String.t -> String.t
 val load_jpeg_file : string -> Hardcaml_jpeg_model.Bitstream_reader.From_string.t

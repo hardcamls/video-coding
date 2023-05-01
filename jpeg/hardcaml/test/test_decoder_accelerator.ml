@@ -22,9 +22,9 @@ let get_entropy_coded_segment bits =
 
 let get_headers_and_model_and_bits jpeg =
   let bits = Util.load_jpeg_file jpeg in
-  let headers = Model.Header.decode bits in
-  let decoder = Model.init headers bits in
-  let model = Model.For_testing.Sequenced.decode decoder in
+  let headers = Decoder.Header.decode bits in
+  let decoder = Decoder.init headers bits in
+  let model = Decoder.For_testing.Sequenced.decode decoder in
   let bits = Bitstream_reader.From_string.get_buffer bits in
   headers, model, get_entropy_coded_segment bits
 ;;
@@ -39,8 +39,8 @@ let max_reconstructed_diff pixels recon =
 
 let test ?(waves = true) ?(error_tolerance = 2) ?num_blocks_to_decode jpeg =
   let headers, model, data = get_headers_and_model_and_bits jpeg in
-  let width = (Model.Header.frame headers |> Option.value_exn).width in
-  let height = (Model.Header.frame headers |> Option.value_exn).height in
+  let width = (Decoder.Header.frame headers |> Option.value_exn).width in
+  let height = (Decoder.Header.frame headers |> Option.value_exn).height in
   print_s [%message (width : int) (height : int)];
   let frame = Frame.create ~chroma_subsampling:C420 ~width ~height in
   let sim =
@@ -62,9 +62,9 @@ let test ?(waves = true) ?(error_tolerance = 2) ?num_blocks_to_decode jpeg =
   inputs.clocking.clear := Bits.vdd;
   Cyclesim.cycle sim;
   inputs.clocking.clear := Bits.gnd;
-  let huffman_tables = Model.Header.huffman_tables headers in
+  let huffman_tables = Decoder.Header.huffman_tables headers in
   Util.load_huffman_tables ~cycle:(fun () -> Cyclesim.cycle sim) inputs.dht huffman_tables;
-  let quant_tables = Model.Header.quant_tables headers in
+  let quant_tables = Decoder.Header.quant_tables headers in
   Util.load_quant_tables ~cycle:(fun () -> Cyclesim.cycle sim) inputs.dqt quant_tables;
   inputs.jpeg_valid := Bits.vdd;
   let pos = ref 0 in
@@ -153,7 +153,7 @@ let test ?(waves = true) ?(error_tolerance = 2) ?num_blocks_to_decode jpeg =
         (* print_s [%message (pixels : Int.Hex.t array)]; *)
         Util.reconstruct ~block_number frame pixels;
         let max_reconstructed_diff =
-          max_reconstructed_diff pixels (Model.Component.recon comp)
+          max_reconstructed_diff pixels (Decoder.Component.recon comp)
         in
         if max_reconstructed_diff >= error_tolerance
         then
@@ -161,8 +161,8 @@ let test ?(waves = true) ?(error_tolerance = 2) ?num_blocks_to_decode jpeg =
             [%message
               (block_number : int)
                 (max_reconstructed_diff : int)
-                (pixels : Model.Component.Summary.pixel_block)
-                (comp : Model.Component.Summary.t)];
+                (pixels : Decoder.Component.Summary.pixel_block)
+                (comp : Decoder.Component.Summary.t)];
         decode_and_compare_with_model (Sequence.tl_eagerly_exn model) (block_number + 1))
   in
   try
@@ -189,7 +189,8 @@ let%expect_test "" =
          ~display_width:120
          ~display_height:75
          ~wave_width:(-30));
-  [%expect{|
+  [%expect
+    {|
     ((width 480) (height 320))
     ((macroblock 0) (subblock 0) (block_number 0) (x_pos 0) (y_pos 0))
     ((block_number 0) (max_reconstructed_diff 1)

@@ -7,9 +7,9 @@ let command_decode_header =
     [%map_open.Command
       let bits = anon ("INPUT" %: string) in
       fun () ->
-        let bits = Model.Bits.create (In_channel.read_all bits) in
-        let header = Model.Header.decode bits in
-        print_s [%message (header : Model.Header.t)]]
+        let bits = Decoder.Bits.create (In_channel.read_all bits) in
+        let header = Decoder.Header.decode bits in
+        print_s [%message (header : Decoder.Header.t)]]
 ;;
 
 let command_decode_frame =
@@ -19,8 +19,8 @@ let command_decode_frame =
       let bits = anon ("INPUT" %: string)
       and yuv = anon (maybe ("OUTPUT" %: string)) in
       fun () ->
-        let bits = Model.Bits.create (In_channel.read_all bits) in
-        let frame = Model.decode_a_frame bits in
+        let bits = Decoder.Bits.create (In_channel.read_all bits) in
+        let frame = Decoder.decode_a_frame bits in
         let yuv =
           match yuv with
           | None -> Out_channel.stdout
@@ -35,18 +35,18 @@ let command_decode_log =
     [%map_open.Command
       let bits = anon ("INPUT" %: string) in
       fun () ->
-        let bits = Model.Bits.create (In_channel.read_all bits) in
-        let header = Model.Header.decode bits in
-        print_s [%message (header : Model.Header.t)];
-        let decoder = Model.init header bits in
-        let decoded = Model.For_testing.Sequenced.decode decoder in
+        let bits = Decoder.Bits.create (In_channel.read_all bits) in
+        let header = Decoder.Header.decode bits in
+        print_s [%message (header : Decoder.Header.t)];
+        let decoder = Decoder.init header bits in
+        let decoded = Decoder.For_testing.Sequenced.decode decoder in
         let block_number = ref 0 in
         let rec decode decoded =
           match Sequence.hd decoded with
           | None -> (* done *) ()
           | Some component ->
             print_s
-              [%message (!block_number : int) (component : Model.Component.Summary.t)];
+              [%message (!block_number : int) (component : Decoder.Component.Summary.t)];
             Int.incr block_number;
             decode (Sequence.tl_eagerly_exn decoded)
         in
