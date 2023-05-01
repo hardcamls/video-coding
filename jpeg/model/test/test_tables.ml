@@ -3,10 +3,11 @@ module Tables = Hardcaml_jpeg_model.Tables
 
 let%expect_test "dc" =
   print_s
-    [%message (Tables.Encoder.dc_table Tables.dc_luma : Tables.dc Tables.coef array)];
+    [%message
+      (Tables.Encoder.dc_table Tables.Default.dc_luma : Tables.dc Tables.coef array)];
   [%expect
     {|
-    ("Tables.Encoder.dc_table Tables.dc_luma"
+    ("Tables.Encoder.dc_table Tables.Default.dc_luma"
      (((length 2) (bits 0) (data 0)) ((length 3) (bits 2) (data 1))
       ((length 3) (bits 3) (data 2)) ((length 3) (bits 4) (data 3))
       ((length 3) (bits 5) (data 4)) ((length 3) (bits 6) (data 5))
@@ -14,10 +15,11 @@ let%expect_test "dc" =
       ((length 6) (bits 62) (data 8)) ((length 7) (bits 126) (data 9))
       ((length 8) (bits 254) (data 10)) ((length 9) (bits 510) (data 11)))) |}];
   print_s
-    [%message (Tables.Encoder.dc_table Tables.dc_chroma : Tables.dc Tables.coef array)];
+    [%message
+      (Tables.Encoder.dc_table Tables.Default.dc_chroma : Tables.dc Tables.coef array)];
   [%expect
     {|
-    ("Tables.Encoder.dc_table Tables.dc_chroma"
+    ("Tables.Encoder.dc_table Tables.Default.dc_chroma"
      (((length 2) (bits 0) (data 0)) ((length 2) (bits 1) (data 1))
       ((length 2) (bits 2) (data 2)) ((length 3) (bits 6) (data 3))
       ((length 4) (bits 14) (data 4)) ((length 5) (bits 30) (data 5))
@@ -29,10 +31,10 @@ let%expect_test "dc" =
 let%expect_test "ac" =
   print_s
     [%message
-      (Tables.Encoder.ac_table Tables.ac_luma : Tables.ac Tables.coef array array)];
+      (Tables.Encoder.ac_table Tables.Default.ac_luma : Tables.ac Tables.coef array array)];
   [%expect
     {|
-    ("Tables.Encoder.ac_table Tables.ac_luma"
+    ("Tables.Encoder.ac_table Tables.Default.ac_luma"
      ((((length 4) (bits 10) (data ((run 0) (size 0))))
        ((length 2) (bits 0) (data ((run 0) (size 1))))
        ((length 2) (bits 1) (data ((run 0) (size 2))))
@@ -211,9 +213,11 @@ let%expect_test "ac" =
        ((length 16) (bits 65534) (data ((run 15) (size 10))))))) |}];
   print_s
     [%message
-      (Tables.Encoder.ac_table Tables.ac_chroma : Tables.ac Tables.coef array array)];
-  [%expect {|
-    ("Tables.Encoder.ac_table Tables.ac_chroma"
+      (Tables.Encoder.ac_table Tables.Default.ac_chroma
+        : Tables.ac Tables.coef array array)];
+  [%expect
+    {|
+    ("Tables.Encoder.ac_table Tables.Default.ac_chroma"
      ((((length 2) (bits 0) (data ((run 0) (size 0))))
        ((length 2) (bits 1) (data ((run 0) (size 1))))
        ((length 3) (bits 4) (data ((run 0) (size 2))))

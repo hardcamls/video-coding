@@ -215,10 +215,9 @@ let load_huffman_tables
       done;
       dht.code.code_write := Bits.gnd;
       dht.code_data.data_write := Bits.vdd;
-      let values = Array.concat (Array.to_list t.values) in
-      for i = 0 to Array.length values - 1 do
+      for i = 0 to Array.length t.values - 1 do
         dht.code_data.data_address <--. i;
-        dht.code_data.data <--. values.(i);
+        dht.code_data.data <--. t.values.(i);
         cycle ()
       done;
       dht.code_data.data_write := Bits.gnd)

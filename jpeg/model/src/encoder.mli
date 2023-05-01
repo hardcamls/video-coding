@@ -28,8 +28,23 @@ val rle : Block.t -> unit
 val size : int -> int
 val magnitude : size:int -> int -> int
 
-val encode_bits
+val write_bits
   :  Block.t
+  -> writer:Bitstream_writer.t
   -> dc_table:Tables.dc_coef array
   -> ac_table:Tables.ac_coef array array
-  -> [ `dc of int | `ac of int * int | `eob ] Tables.coef list
+  -> unit
+
+val write_headers
+  :  Bitstream_writer.t
+  -> width:int
+  -> height:int
+  -> dc_luma:Tables.Specification.t
+  -> ac_luma:Tables.Specification.t
+  -> dc_chroma:Tables.Specification.t
+  -> ac_chroma:Tables.Specification.t
+  -> qnt_luma:int array
+  -> qnt_chroma:int array
+  -> unit
+
+val encode_420 : frame:Frame.t -> quality:int -> writer:Bitstream_writer.t -> unit

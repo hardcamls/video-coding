@@ -8,8 +8,9 @@ end
 
 let test values =
   let writer = Writer.create () in
-  List.iter values ~f:(fun (bits, value) -> Writer.put_bits writer ~bits ~value);
-  Writer.flush_with_1s writer;
+  List.iter values ~f:(fun (bits, value) ->
+      Writer.put_bits writer ~stuffing:false ~bits ~value);
+  Writer.flush_with_1s ~stuffing:false writer;
   let buffer = Writer.get_buffer writer in
   let reader = Reader.create buffer in
   List.iter values ~f:(fun (bits, expected_value) ->

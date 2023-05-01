@@ -145,19 +145,16 @@ let%expect_test "test" =
            250 255 230 253 255 248)))))
       (huffman_tables
        (((length 22) (table_class 1) (destination_identifier 1)
-         (lengths (1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0))
-         (values ((0) (17) (1) () () () () () () () () () () () () ())))
+         (lengths (1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0)) (values (0 17 1)))
         ((length 22) (table_class 0) (destination_identifier 1)
-         (lengths (1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0))
-         (values ((0) (1) (2) () () () () () () () () () () () () ())))
+         (lengths (1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0)) (values (0 1 2)))
         ((length 45) (table_class 1) (destination_identifier 0)
          (lengths (0 2 2 1 4 1 4 2 1 4 3 1 1 0 0 0))
          (values
-          (() (0 1) (2 17) (33) (3 18 49 65) (81) (4 19 34 97) (50 113) (129)
-           (5 35 66 145) (20 51 82) (161) (193) () () ())))
+          (0 1 2 17 33 3 18 49 65 81 4 19 34 97 50 113 129 5 35 66 145 20 51 82
+           161 193)))
         ((length 26) (table_class 0) (destination_identifier 0)
-         (lengths (0 3 1 1 1 1 0 0 0 0 0 0 0 0 0 0))
-         (values (() (0 1 2) (3) (4) (5) (6) () () () () () () () () () ())))))
+         (lengths (0 3 1 1 1 1 0 0 0 0 0 0 0 0 0 0)) (values (0 1 2 3 4 5 6)))))
       (restart_interval ())
       (scan
        (((length 12) (number_of_image_components 3)

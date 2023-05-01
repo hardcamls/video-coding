@@ -69,23 +69,6 @@ module Header = struct
   let decode bits = decode bits empty
 end
 
-let create_code_table lengths (values : int array array) =
-  let rec build code length_pos =
-    if length_pos = Array.length lengths
-    then []
-    else if lengths.(length_pos) = 0
-    then build (code lsl 1) (length_pos + 1)
-    else
-      List.init lengths.(length_pos) ~f:(fun i ->
-          { Tables.length = length_pos + 1
-          ; bits = code + i
-          ; data = values.(length_pos).(i)
-          })
-      :: build ((code + lengths.(length_pos)) lsl 1) (length_pos + 1)
-  in
-  build 0 0 |> List.concat
-;;
-
 let mag' cat code =
   if code land (1 lsl (cat - 1)) <> 0
   then (* +ve coeff *)
@@ -279,23 +262,20 @@ let find_huffman_table ac_dc (huffman_tables : Markers.Dht.t list) id =
         huff.table_class = ac_dc && huff.destination_identifier = id)
   with
   | None -> raise_s [%message "unable to find huffman table"]
-  | Some huff -> create_code_table huff.lengths huff.values
+  | Some huff -> huff
 ;;
 
 let find_dc_huffman_table huffman_tables id =
-  find_huffman_table 0 huffman_tables id |> Tables.Lut.create
+  let table = find_huffman_table 0 huffman_tables id in
+  Tables.Specification.create_dc_code_table
+    { Tables.Specification.lengths = table.lengths; values = table.values }
+  |> Tables.Lut.create
 ;;
 
 let find_ac_huffman_table huffman_tables id =
-  let to_ac_run_size x =
-    let { Tables.length; bits; data = rrrrssss } = x in
-    { Tables.length
-    ; bits
-    ; data = { Tables.run = rrrrssss lsr 4; size = rrrrssss land 0xf }
-    }
-  in
-  find_huffman_table 1 huffman_tables id
-  |> List.map ~f:to_ac_run_size
+  let table = find_huffman_table 1 huffman_tables id in
+  Tables.Specification.create_ac_code_table
+    { Tables.Specification.lengths = table.lengths; values = table.values }
   |> Tables.Lut.create
 ;;
 
