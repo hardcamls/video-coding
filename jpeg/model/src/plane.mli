@@ -7,4 +7,5 @@ val ( .!() ) : t -> int -> char
 val ( .!()<- ) : t -> int -> char -> unit
 val ( .![] ) : t -> int * int -> char
 val ( .![]<- ) : t -> int * int -> char -> unit
-val output : t -> out_channel:Stdio.Out_channel.t -> unit
+val output : t -> Stdio.Out_channel.t -> unit
+val input : t -> Stdio.In_channel.t -> unit

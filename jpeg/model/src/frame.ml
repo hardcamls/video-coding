@@ -63,8 +63,14 @@ let of_planes ~y ~u ~v =
 let width t = Plane.width (y t)
 let height t = Plane.height (y t)
 
-let output t ~out_channel =
-  Plane.output (y t) ~out_channel;
-  Plane.output (u t) ~out_channel;
-  Plane.output (v t) ~out_channel
+let output t out_channel =
+  Plane.output (y t) out_channel;
+  Plane.output (u t) out_channel;
+  Plane.output (v t) out_channel
+;;
+
+let input t in_channel =
+  Plane.input (y t) in_channel;
+  Plane.input (u t) in_channel;
+  Plane.input (v t) in_channel
 ;;

@@ -14,7 +14,7 @@ let%expect_test "test upto cat=11" =
           (of_int ~width:12 (code lsl (12 - cat)))
         |> Bits.to_sint
       in
-      let expected = Hardcaml_jpeg_model.Model.For_testing.mag cat code in
+      let expected = Hardcaml_jpeg_model.Decoder.For_testing.mag cat code in
       if result <> expected
       then
         raise_s

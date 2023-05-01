@@ -69,28 +69,11 @@ module Header = struct
   let decode bits = decode bits empty
 end
 
-let create_code_table lengths (values : int array array) =
-  let rec build code length_pos =
-    if length_pos = Array.length lengths
-    then []
-    else if lengths.(length_pos) = 0
-    then build (code lsl 1) (length_pos + 1)
-    else
-      List.init lengths.(length_pos) ~f:(fun i ->
-          { Tables.length = length_pos + 1
-          ; bits = code + i
-          ; data = values.(length_pos).(i)
-          })
-      :: build ((code + lengths.(length_pos)) lsl 1) (length_pos + 1)
-  in
-  build 0 0 |> List.concat
-;;
-
 let mag' cat code =
   if code land (1 lsl (cat - 1)) <> 0
-  then (* +codee coeff *)
+  then (* +ve coeff *)
     code
-  else (* -codee coeff *)
+  else (* -ve coeff *)
     (code lor (-1 lsl cat)) + 1
 ;;
 
@@ -203,41 +186,16 @@ module Component = struct
   module Summary = struct
     type nonrec t = t
 
-    let sexp_of_block len (t : int array) =
-      let sexp_of_hex x =
-        let hex x =
-          let x = x land 15 in
-          if x < 10
-          then Char.of_int_exn (x + Char.to_int '0')
-          else Char.of_int_exn (x - 10 + Char.to_int 'a')
-        in
-        sexp_of_string
-          (String.init len ~f:(fun i ->
-               let i = len - i - 1 in
-               hex (x lsr (i * 4))))
-      in
-      let block = Array.init 8 ~f:(fun y -> Array.init 8 ~f:(fun x -> t.(x + (y * 8)))) in
-      [%sexp_of: hex array array] block
-    ;;
-
-    type coef_block = int array
-
-    let sexp_of_coef_block = sexp_of_block 3
-
-    type pixel_block = int array
-
-    let sexp_of_pixel_block = sexp_of_block 2
-
     let sexp_of_t { x; y; dc_pred; component; coefs; dequant; idct; recon; _ } =
       [%message
         (x : int)
           (y : int)
           (dc_pred : int)
           (component.identifier : int)
-          (coefs : coef_block)
-          (dequant : coef_block)
-          (idct : pixel_block)
-          (recon : pixel_block)]
+          (coefs : Util.coef_block)
+          (dequant : Util.coef_block)
+          (idct : Util.pixel_block)
+          (recon : Util.pixel_block)]
     ;;
   end
 end
@@ -279,23 +237,20 @@ let find_huffman_table ac_dc (huffman_tables : Markers.Dht.t list) id =
         huff.table_class = ac_dc && huff.destination_identifier = id)
   with
   | None -> raise_s [%message "unable to find huffman table"]
-  | Some huff -> create_code_table huff.lengths huff.values
+  | Some huff -> huff
 ;;
 
 let find_dc_huffman_table huffman_tables id =
-  find_huffman_table 0 huffman_tables id |> Tables.Lut.create
+  let table = find_huffman_table 0 huffman_tables id in
+  Tables.Specification.create_dc_code_table
+    { Tables.Specification.lengths = table.lengths; values = table.values }
+  |> Tables.Lut.create
 ;;
 
 let find_ac_huffman_table huffman_tables id =
-  let to_ac_run_size x =
-    let { Tables.length; bits; data = rrrrssss } = x in
-    { Tables.length
-    ; bits
-    ; data = { Tables.run = rrrrssss lsr 4; size = rrrrssss land 0xf }
-    }
-  in
-  find_huffman_table 1 huffman_tables id
-  |> List.map ~f:to_ac_run_size
+  let table = find_huffman_table 1 huffman_tables id in
+  Tables.Specification.create_ac_code_table
+    { Tables.Specification.lengths = table.lengths; values = table.values }
   |> Tables.Lut.create
 ;;
 

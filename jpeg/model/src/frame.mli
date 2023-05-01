@@ -15,4 +15,5 @@ val y : t -> Plane.t
 val u : t -> Plane.t
 val v : t -> Plane.t
 val chroma_subsampling : t -> Chroma_subsampling.t
-val output : t -> out_channel:Stdio.Out_channel.t -> unit
+val output : t -> Stdio.Out_channel.t -> unit
+val input : t -> Stdio.In_channel.t -> unit

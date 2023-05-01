@@ -49,8 +49,8 @@ let load_jpeg_file filename =
 let headers_and_entropy_coded_segment filename =
   let bits = In_channel.with_file ~binary:true filename ~f:In_channel.input_all in
   let reader = Bitstream_reader.From_string.create bits in
-  let header = Model.Header.decode reader in
-  let entropy_bits = Model.For_testing.extract_entropy_coded_bits reader in
+  let header = Decoder.Header.decode reader in
+  let entropy_bits = Decoder.For_testing.extract_entropy_coded_bits reader in
   header, Bitstream_reader.From_string.get_buffer entropy_bits
 ;;
 
@@ -215,10 +215,9 @@ let load_huffman_tables
       done;
       dht.code.code_write := Bits.gnd;
       dht.code_data.data_write := Bits.vdd;
-      let values = Array.concat (Array.to_list t.values) in
-      for i = 0 to Array.length values - 1 do
+      for i = 0 to Array.length t.values - 1 do
         dht.code_data.data_address <--. i;
-        dht.code_data.data <--. values.(i);
+        dht.code_data.data <--. t.values.(i);
         cycle ()
       done;
       dht.code_data.data_write := Bits.gnd)

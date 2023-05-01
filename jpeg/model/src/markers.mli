@@ -1,5 +1,6 @@
 open Base
-module Bits = Bitstream_reader.From_string
+module Reader = Bitstream_reader.From_string
+module Writer = Bitstream_writer
 
 module Component : sig
   type t =
@@ -10,7 +11,7 @@ module Component : sig
     }
   [@@deriving sexp_of]
 
-  val decode : Bits.t -> t
+  val decode : Reader.t -> t
 end
 
 (* start of frame*)
@@ -25,7 +26,8 @@ module Sof : sig
     }
   [@@deriving sexp_of]
 
-  val decode : Bits.t -> t
+  val decode : Reader.t -> t
+  val encode : Writer.t -> t -> unit
 end
 
 module Scan_component : sig
@@ -36,7 +38,7 @@ module Scan_component : sig
     }
   [@@deriving sexp_of]
 
-  val decode : Bits.t -> t
+  val decode : Reader.t -> t
 end
 
 (* start of scan*)
@@ -52,7 +54,8 @@ module Sos : sig
     }
   [@@deriving sexp_of]
 
-  val decode : Bits.t -> t
+  val decode : Reader.t -> t
+  val encode : Writer.t -> t -> unit
 end
 
 module Dqt : sig
@@ -64,7 +67,10 @@ module Dqt : sig
     }
   [@@deriving sexp_of]
 
-  val decode : Bits.t -> t
+  val decode : Reader.t -> t
+
+  (** Length is calculated and elements are zigzag'd *)
+  val encode : Writer.t -> t -> unit
 end
 
 module Dri : sig
@@ -74,7 +80,7 @@ module Dri : sig
     }
   [@@deriving sexp_of]
 
-  val decode : Bits.t -> t
+  val decode : Reader.t -> t
 end
 
 module Dht : sig
@@ -83,9 +89,10 @@ module Dht : sig
     ; table_class : int
     ; destination_identifier : int
     ; lengths : int array
-    ; values : int array array
+    ; values : int array
     }
   [@@deriving sexp_of]
 
-  val decode : Bits.t -> t
+  val decode : Reader.t -> t
+  val encode : Writer.t -> t -> unit
 end
