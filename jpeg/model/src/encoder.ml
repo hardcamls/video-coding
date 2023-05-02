@@ -22,30 +22,57 @@ module Rle = struct
 end
 
 module Block = struct
+  module Coefs = struct
+    type t = int array
+
+    let sexp_of_t = Util.sexp_of_coef_block
+  end
+
+  module Pixels = struct
+    type t = int array
+
+    let sexp_of_t = Util.sexp_of_pixel_block
+  end
+
+  module Decoded = struct
+    type t =
+      { dequant : Coefs.t
+      ; idct : Coefs.t
+      ; recon : Pixels.t
+      ; error : Pixels.t
+      }
+    [@@deriving sexp_of]
+
+    let create () =
+      { dequant = Array.create ~len:64 0
+      ; idct = Array.create ~len:64 0
+      ; recon = Array.create ~len:64 0
+      ; error = Array.create ~len:64 0
+      }
+    ;;
+  end
+
   type t =
-    { input_pixels : int array
-    ; fdct : int array
-    ; quant : int array
+    { mutable x_pos : int
+    ; mutable y_pos : int
+    ; input_pixels : Pixels.t
+    ; fdct : Coefs.t
+    ; quant : Coefs.t
     ; mutable dc_pred : int
     ; mutable rle : Rle.t list
-    ; (* XX For debugging *)
-      dequant : int array
-    ; idct : int array
-    ; recon : int array
-    ; error : int array
+    ; decoded : Decoded.t option
     }
   [@@deriving sexp_of]
 
-  let create () =
-    { input_pixels = Array.create ~len:64 0
+  let create compute_reconstruction_error =
+    { x_pos = 0
+    ; y_pos = 0
+    ; input_pixels = Array.create ~len:64 0
     ; fdct = Array.create ~len:64 0
     ; quant = Array.create ~len:64 0
     ; dc_pred = 0
     ; rle = []
-    ; dequant = Array.create ~len:64 0
-    ; idct = Array.create ~len:64 0
-    ; recon = Array.create ~len:64 0
-    ; error = Array.create ~len:64 0
+    ; decoded = (if compute_reconstruction_error then Some (Decoded.create ()) else None)
     }
   ;;
 end
@@ -62,7 +89,10 @@ let level_shifted_input_block plane (block : Block.t) ~x_pos ~y_pos =
 ;;
 
 let fdct (block : Block.t) = Dct.Chen.forward_8x8 block.fdct
-let idct (block : Block.t) = Dct.Chen.inverse_8x8 block.idct
+
+let idct (block : Block.t) =
+  Option.iter block.decoded ~f:(fun block -> Dct.Chen.inverse_8x8 block.idct)
+;;
 
 let quant_and_scale fdct qnt =
   (* the forward chen transform is scaled by 4. *)
@@ -77,18 +107,20 @@ let quant (block : Block.t) ~table =
 ;;
 
 let dequant (block : Block.t) ~table =
-  for i = 0 to 63 do
-    let c = block.quant.(i) * table.(i) in
-    block.dequant.(Zigzag.inverse.(i)) <- c;
-    block.idct.(Zigzag.inverse.(i)) <- c
-  done
+  Option.iter block.decoded ~f:(fun dec_block ->
+      for i = 0 to 63 do
+        let c = block.quant.(i) * table.(i) in
+        dec_block.dequant.(Zigzag.inverse.(i)) <- c;
+        dec_block.idct.(Zigzag.inverse.(i)) <- c
+      done)
 ;;
 
 let recon (block : Block.t) =
-  for i = 0 to 63 do
-    block.recon.(i) <- Int.max 0 (Int.min 255 (block.idct.(i) + 128));
-    block.error.(i) <- Int.abs (block.recon.(i) - block.input_pixels.(i))
-  done
+  Option.iter block.decoded ~f:(fun dec_block ->
+      for i = 0 to 63 do
+        dec_block.recon.(i) <- Int.max 0 (Int.min 255 (dec_block.idct.(i) + 128));
+        dec_block.error.(i) <- Int.abs (dec_block.recon.(i) - block.input_pixels.(i))
+      done)
 ;;
 
 let rle (block : Block.t) =
@@ -162,8 +194,8 @@ let write_bits
   | _ -> failwith "no or invalid dc coef?"
 ;;
 
-let encode_block plane block ~writer ~x_pos ~y_pos ~dc_table ~ac_table ~qnt_table =
-  level_shifted_input_block plane block ~x_pos ~y_pos;
+let encode_block plane block ~writer ~dc_table ~ac_table ~qnt_table =
+  level_shifted_input_block plane block ~x_pos:block.x_pos ~y_pos:block.y_pos;
   fdct block;
   quant block ~table:qnt_table;
   rle block;
@@ -285,98 +317,136 @@ let write_headers
   write_sos writer
 ;;
 
-let dump_block
-    ~block_no
-    ~x_pos
-    ~y_pos
-    ({ input_pixels; fdct; quant; dc_pred; rle; dequant; idct; recon; error } : Block.t)
-  =
-  Stdio.print_s
-    [%message
-      (x_pos : int)
-        (y_pos : int)
-        (block_no : int ref)
-        (input_pixels : Util.pixel_block)
-        (fdct : Util.coef_block)
-        (quant : Util.coef_block)
-        (dc_pred : int)
-        (rle : Rle.t list)
-        (dequant : Util.coef_block)
-        (idct : Util.coef_block)
-        (recon : Util.pixel_block)
-        (error : Util.pixel_block)];
-  Int.incr block_no
-;;
+module Sequenced = struct
+  type t =
+    { frame : Frame.t
+    ; writer : Writer.t
+    ; blocks : Block.t array
+    ; qnt_luma : int array
+    ; qnt_chroma : int array
+    ; dc_luma : Tables.dc_coef array
+    ; ac_luma : Tables.ac_coef array array
+    ; dc_chroma : Tables.dc_coef array
+    ; ac_chroma : Tables.ac_coef array array
+    }
+
+  let create_and_write_header
+      ?(compute_reconstruction_error = false)
+      ~frame
+      ~quality
+      ~writer
+      ()
+    =
+    let width = Frame.width frame in
+    let height = Frame.height frame in
+    assert (width % 16 = 0);
+    assert (height % 16 = 0);
+    let blocks = Array.init 3 ~f:(fun _ -> Block.create compute_reconstruction_error) in
+    let qnt_luma = Quant_tables.scale Quant_tables.luma quality in
+    let qnt_chroma = Quant_tables.scale Quant_tables.chroma quality in
+    write_headers
+      writer
+      ~width
+      ~height
+      ~dc_luma:Tables.Default.dc_luma
+      ~ac_luma:Tables.Default.ac_luma
+      ~dc_chroma:Tables.Default.dc_chroma
+      ~ac_chroma:Tables.Default.ac_chroma
+      ~qnt_luma
+      ~qnt_chroma;
+    let dc_luma = Tables.Encoder.dc_table Tables.Default.dc_luma in
+    let ac_luma = Tables.Encoder.ac_table Tables.Default.ac_luma in
+    let dc_chroma = Tables.Encoder.dc_table Tables.Default.dc_chroma in
+    let ac_chroma = Tables.Encoder.ac_table Tables.Default.ac_chroma in
+    { frame
+    ; writer
+    ; blocks
+    ; qnt_luma
+    ; qnt_chroma
+    ; dc_luma
+    ; ac_luma
+    ; dc_chroma
+    ; ac_chroma
+    }
+  ;;
+
+  let encode_420_seq
+      { frame
+      ; writer
+      ; blocks
+      ; qnt_luma
+      ; qnt_chroma
+      ; dc_luma
+      ; ac_luma
+      ; dc_chroma
+      ; ac_chroma
+      }
+    =
+    let width = Frame.width frame in
+    let height = Frame.height frame in
+    Sequence.init (height / 16) ~f:(fun y_mb ->
+        Sequence.init (width / 16) ~f:(fun x_mb ->
+            let y =
+              Sequence.init 2 ~f:(fun y_subblk ->
+                  Sequence.init 2 ~f:(fun x_subblk ->
+                      let x_blk = (x_mb * 2) + x_subblk in
+                      let y_blk = (y_mb * 2) + y_subblk in
+                      blocks.(0).x_pos <- x_blk * 8;
+                      blocks.(0).y_pos <- y_blk * 8;
+                      encode_block
+                        (Frame.y frame)
+                        blocks.(0)
+                        ~writer
+                        ~dc_table:dc_luma
+                        ~ac_table:ac_luma
+                        ~qnt_table:qnt_luma;
+                      blocks.(0)))
+              |> Sequence.concat
+            in
+            let u =
+              Sequence.init 1 ~f:(fun _ ->
+                  blocks.(1).x_pos <- x_mb * 8;
+                  blocks.(1).y_pos <- y_mb * 8;
+                  encode_block
+                    (Frame.u frame)
+                    blocks.(1)
+                    ~writer
+                    ~dc_table:dc_chroma
+                    ~ac_table:ac_chroma
+                    ~qnt_table:qnt_chroma;
+                  blocks.(1))
+            in
+            let v =
+              Sequence.init 1 ~f:(fun _ ->
+                  blocks.(2).x_pos <- x_mb * 8;
+                  blocks.(2).y_pos <- y_mb * 8;
+                  encode_block
+                    (Frame.v frame)
+                    blocks.(2)
+                    ~writer
+                    ~dc_table:dc_chroma
+                    ~ac_table:ac_chroma
+                    ~qnt_table:qnt_chroma;
+                  blocks.(2))
+            in
+            Sequence.Infix.(y @ u @ v))
+        |> Sequence.concat)
+    |> Sequence.concat
+  ;;
+
+  let complete_and_write_eoi { writer; _ } =
+    Writer.flush_with_1s writer ~stuffing:true;
+    write_marker_code writer Marker_code.eoi
+  ;;
+end
 
 (* Basic 420 encoder.  We'll generalize over components and scans shortly. *)
 let encode_420 ~frame ~quality ~writer =
-  let width = Frame.width frame in
-  let height = Frame.height frame in
-  assert (width % 16 = 0);
-  assert (height % 16 = 0);
-  Stdio.print_s [%message (width : int) "x" (height : int)];
-  let blocks = Array.init 3 ~f:(fun _ -> Block.create ()) in
-  let qnt_luma = Quant_tables.scale Quant_tables.luma quality in
-  let qnt_chroma = Quant_tables.scale Quant_tables.chroma quality in
-  write_headers
-    writer
-    ~width
-    ~height
-    ~dc_luma:Tables.Default.dc_luma
-    ~ac_luma:Tables.Default.ac_luma
-    ~dc_chroma:Tables.Default.dc_chroma
-    ~ac_chroma:Tables.Default.ac_chroma
-    ~qnt_luma
-    ~qnt_chroma;
-  let dc_luma = Tables.Encoder.dc_table Tables.Default.dc_luma in
-  let ac_luma = Tables.Encoder.ac_table Tables.Default.ac_luma in
-  let dc_chroma = Tables.Encoder.dc_table Tables.Default.dc_chroma in
-  let ac_chroma = Tables.Encoder.ac_table Tables.Default.ac_chroma in
-  let block_no = ref 0 in
-  for y_mb = 0 to (height / 16) - 1 do
-    for x_mb = 0 to (width / 16) - 1 do
-      (* luma *)
-      for y_subblk = 0 to 1 do
-        for x_subblk = 0 to 1 do
-          let x_blk = (x_mb * 2) + x_subblk in
-          let y_blk = (y_mb * 2) + y_subblk in
-          let x_pos = x_blk * 8 in
-          let y_pos = y_blk * 8 in
-          encode_block
-            (Frame.y frame)
-            blocks.(0)
-            ~writer
-            ~x_pos
-            ~y_pos
-            ~dc_table:dc_luma
-            ~ac_table:ac_luma
-            ~qnt_table:qnt_luma;
-          dump_block ~block_no ~x_pos ~y_pos blocks.(0)
-        done
-      done;
-      (* chroma *)
-      encode_block
-        (Frame.u frame)
-        blocks.(1)
-        ~writer
-        ~x_pos:(x_mb * 8)
-        ~y_pos:(y_mb * 8)
-        ~dc_table:dc_chroma
-        ~ac_table:ac_chroma
-        ~qnt_table:qnt_chroma;
-      dump_block ~block_no ~x_pos:(x_mb * 8) ~y_pos:(y_mb * 8) blocks.(1);
-      encode_block
-        (Frame.v frame)
-        blocks.(2)
-        ~writer
-        ~x_pos:(x_mb * 8)
-        ~y_pos:(y_mb * 8)
-        ~dc_table:dc_chroma
-        ~ac_table:ac_chroma
-        ~qnt_table:qnt_chroma;
-      dump_block ~block_no ~x_pos:(x_mb * 8) ~y_pos:(y_mb * 8) blocks.(2)
-    done
-  done;
-  Writer.flush_with_1s writer ~stuffing:true;
-  write_marker_code writer Marker_code.eoi
+  let t = Sequenced.create_and_write_header ~frame ~quality ~writer () in
+  Sequence.iter (Sequenced.encode_420_seq t) ~f:(fun _ -> ());
+  Sequenced.complete_and_write_eoi t
 ;;
+
+module For_testing = struct
+  module Sequenced = Sequenced
+end

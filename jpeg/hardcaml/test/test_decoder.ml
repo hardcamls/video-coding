@@ -11,9 +11,6 @@ include struct
   module Reader = Bitstream_reader
   module Sexp_util = Util
 end
-(* XX decoder bug occurs at block=1875 with large reconstructed diff (38).  
-   Assuming a bytestream problem as this doesn't happen in the accelerator design. 
-*)
 
 let ( <--. ) a b = a := Bits.of_int ~width:(Bits.width !a) b
 

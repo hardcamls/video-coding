@@ -86,6 +86,34 @@ let command_encode_frame =
         Out_channel.write_all bits ~data:(Bitstream_writer.get_buffer writer)]
 ;;
 
+let command_encode_log =
+  Command.basic
+    ~summary:"Encode a frame and write a log file"
+    [%map_open.Command
+      let yuv = anon ("INPUT-FRAME" %: string)
+      and { width; height } = anon ("WIDTHxHEIGHT" %: Size.arg)
+      and quality = flag "-quality" (optional_with_default 75 int) ~doc:" Image quality"
+      and verbose = flag "-verbose" no_arg ~doc:" Reconstruct and compute error" in
+      fun () ->
+        let frame = Frame.create ~chroma_subsampling:C420 ~width ~height in
+        In_channel.with_file yuv ~f:(Frame.input frame);
+        let writer = Bitstream_writer.create () in
+        let encoder =
+          Encoder.For_testing.Sequenced.create_and_write_header
+            ~compute_reconstruction_error:verbose
+            ~frame
+            ~quality
+            ~writer
+            ()
+        in
+        let block_number = ref 0 in
+        Sequence.iter
+          (Encoder.For_testing.Sequenced.encode_420_seq encoder)
+          ~f:(fun block ->
+            print_s [%message (!block_number : int) (block : Encoder.Block.t)]);
+        Encoder.For_testing.Sequenced.complete_and_write_eoi encoder]
+;;
+
 let () =
   Command_unix.run
     (Command.group
@@ -98,6 +126,8 @@ let () =
              ; "log", command_decode_log
              ] )
        ; ( "encode"
-         , Command.group ~summary:"Encoder model" [ "frame", command_encode_frame ] )
+         , Command.group
+             ~summary:"Encoder model"
+             [ "frame", command_encode_frame; "log", command_encode_log ] )
        ])
 ;;

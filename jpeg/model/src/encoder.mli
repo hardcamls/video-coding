@@ -11,23 +11,34 @@ module Rle : sig
   [@@deriving sexp_of]
 end
 
-(** Encoded state of a single block. *)
+(** Encoded state of a single block. 
+    
+    Can optionally perform the decoder procedure starting from the quantized coefficients and compute the reconstruction error of each block.
+*)
 module Block : sig
+  module Decoded : sig
+    type t =
+      { dequant : int array
+      ; idct : int array
+      ; recon : int array
+      ; error : int array
+      }
+    [@@deriving sexp_of]
+  end
+
   type t =
-    { input_pixels : int array
+    { mutable x_pos : int
+    ; mutable y_pos : int
+    ; input_pixels : int array
     ; fdct : int array
     ; quant : int array
     ; mutable dc_pred : int
     ; mutable rle : Rle.t list
-    ; (* XX For debugging *)
-      dequant : int array
-    ; idct : int array
-    ; recon : int array
-    ; error : int array
+    ; decoded : Decoded.t option
     }
   [@@deriving sexp_of]
 
-  val create : unit -> t
+  val create : bool -> t
 end
 
 (** {2 Various functions which comprise block encoding.}*)
@@ -71,7 +82,7 @@ val write_headers
   -> qnt_chroma:int array
   -> unit
 
-(** {2 Frame encoding}*)
+(** {2 Frame encoding} *)
 
 (** Encode a 4:2:0 input [frame]. 
 
@@ -80,3 +91,20 @@ val write_headers
     The coded frame is written to [writer].
 *)
 val encode_420 : frame:Frame.t -> quality:int -> writer:Bitstream_writer.t -> unit
+
+module For_testing : sig
+  module Sequenced : sig
+    type t
+
+    val create_and_write_header
+      :  ?compute_reconstruction_error:bool
+      -> frame:Frame.t
+      -> quality:int
+      -> writer:Bitstream_writer.t
+      -> unit
+      -> t
+
+    val encode_420_seq : t -> Block.t Sequence.t
+    val complete_and_write_eoi : t -> unit
+  end
+end
