@@ -1,3 +1,8 @@
+(** Decoder data exposed with an interface that can be connected to a soft cpu. 
+    
+    The CPU will perform bitstream management and use this block for Huffman decode, IDCT, IQuant
+*)
+
 open Hardcaml
 
 module I : sig

@@ -3,6 +3,7 @@
 open! Base
 module Bits = Bitstream_reader.From_string
 
+(** Reading the JPEG header segments. *)
 module Header : sig
   type t [@@deriving sexp_of]
 
@@ -19,6 +20,7 @@ module Header : sig
   val huffman_tables : t -> Markers.Dht.t list
 end
 
+(** An 8x8 block from a single component of the image. *)
 module Component : sig
   type t [@@deriving sexp_of]
 
@@ -31,17 +33,26 @@ module Component : sig
   val recon : t -> int array
 end
 
+(** Decoder. *)
 type t
 
+(** Create the decoder from a decoded header and bitstream placed just after the Start of Scan data. *)
 val init : Header.t -> Bits.t -> t
+
+(** Decode a single frame *)
 val decode : t -> unit
+
+(** Get decoded frame data *)
 val get_frame : t -> Frame.t
+
+(** Return the bitstream used by the decoder. *)
 val entropy_coded_bits : t -> Bits.t
 
-(** Decode frame data.  Bits should aligned to the entropy coded segment. *)
+(** Decode header and frame data.  Bits should aligned to the entropy coded segment. *)
 val decode_a_frame : Bits.t -> Frame.t
 
 module For_testing : sig
+  (** Get the magnitude from it's coded size and bit pattern value. *)
   val mag : int -> int -> int
 
   (** Given a bitstream that has decoded the headers up to start of scan, 
@@ -49,7 +60,9 @@ module For_testing : sig
   val extract_entropy_coded_bits : Bits.t -> Bits.t
 
   module Sequenced : sig
-    (* Take care!  Lots of stuff happens under the hood when you access this sequence!
+    (* Decode an image one block at a time.contents
+    
+       Take care!  Lots of stuff happens under the hood when you access this sequence!
 
        The sequence is memoized to help avoid repeated evaluations, but must be queried 
        sequentially regardless.

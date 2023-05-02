@@ -1,3 +1,7 @@
+(** Huffman decodes the dc and ac coefficients of one 8x8 block.  
+    Worst case it should take ~128 cycles, though typically it will be much less. 
+*)
+
 open! Base
 open Hardcaml
 

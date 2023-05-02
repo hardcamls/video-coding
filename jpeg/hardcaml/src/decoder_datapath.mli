@@ -1,3 +1,8 @@
+(** Basic 8x8 block JPEG data path. 
+    
+    Huffman decode, Iquant, Idct + level shift.
+*)
+
 open Hardcaml
 
 module I : sig

@@ -1,3 +1,5 @@
+(** Top level JPEG decode with integrated header parsing. *)
+
 open! Base
 open Hardcaml
 

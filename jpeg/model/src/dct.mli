@@ -1,10 +1,16 @@
 (** Forward (type II) and inverse (type III) 8x8 DCTs. *)
 
+(** Chen DCT using integer arithmentic. 
+
+    The forward transform output is scaled by a factor of 4 from the reference 
+    dct result.
+*)
 module Chen : sig
   val forward_8x8 : int array -> unit
   val inverse_8x8 : int array -> unit
 end
 
+(** Utilities for dealing witg 8x8 matrices. *)
 module Matrix8x8 : sig
   type 'a t = 'a array array [@@deriving sexp_of]
 
@@ -24,6 +30,7 @@ module Matrix4x4 : sig
   type 'a t = 'a array array [@@deriving sexp_of]
 end
 
+(** Floating point reference DCTs. *)
 module Floating_point : sig
   (** Reference 8x8 transforms. *)
   module Eight_point : sig
@@ -44,6 +51,7 @@ module Floating_point : sig
   end
 end
 
+(** Fixed point approximations of the floating point DCTs. *)
 module Fixed_point : sig
   val fixed_coefs : fixed_prec:int -> float Matrix8x8.t -> int Matrix8x8.t
   val round : int -> fixed_prec:int -> int

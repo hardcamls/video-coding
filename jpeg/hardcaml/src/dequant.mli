@@ -1,3 +1,8 @@
+(** Inverse quantiser.  
+    
+    Must be programmed with Quantisation tables (in zigzag order, as per the standard).
+*)
+
 open! Base
 open Hardcaml
 

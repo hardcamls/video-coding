@@ -1,11 +1,11 @@
-(** Default quantisation tables.*)
+(** Default quantisation tables. *)
 
 open! Base
 
 (** Default luma and chroma tables as specified in the jpeg standard.  
-    Note that these are not in zigzag order. *)
-
+    Note that these are in zigzag order. *)
 val luma : int array
+
 val chroma : int array
 
 (** Scale table by quality factor [1..100]. 

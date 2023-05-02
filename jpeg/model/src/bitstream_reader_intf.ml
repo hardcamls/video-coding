@@ -28,7 +28,7 @@ module type S = sig
   val align_to_byte : t -> unit
 end
 
-(** Bitstream reader functions. *)
+(** Bitstream reader.  Allow reading of upto the next 16 bits of an encoded bitstream. *)
 module type Bitstream_reader = sig
   module type S = S
   module type Buffer = Buffer

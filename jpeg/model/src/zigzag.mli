@@ -1,3 +1,5 @@
+(** Zigzag tables. *)
+
 open! Base
 
 val forward : int array

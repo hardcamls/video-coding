@@ -1,4 +1,7 @@
-(** IDCT implementation *)
+(** Simple Fixde point IDCT implementation.contents
+  
+    Currently takes 1024 cycles per 8x8 block (it implements 2 8x8 matrix multiplies with a single multiplier.)
+*)
 
 open! Base
 open Hardcaml

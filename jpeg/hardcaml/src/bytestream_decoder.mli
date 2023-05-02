@@ -1,3 +1,11 @@
+(** Bytestream decoder. 
+    
+    JPEG input data is accepted 1 byte per cycle.  The headers are decoded then the entropy coded
+    segment is output with sutffing bytes removed.
+
+    This block performs top level management control of the decoder process.
+*)
+
 open Base
 open Hardcaml
 

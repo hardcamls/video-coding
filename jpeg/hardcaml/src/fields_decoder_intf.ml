@@ -1,3 +1,8 @@
+(** Component for decoding a byte stream into an arbitrary set of fields. 
+    
+    The header decoders are built up from this.
+*)
+
 open! Base
 open! Hardcaml
 

@@ -1,3 +1,5 @@
+(** Parsers for the JPEG headers - Sof, Sos, Dqt, Dht. *)
+
 open! Base
 open! Hardcaml
 

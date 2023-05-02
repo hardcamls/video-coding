@@ -2,8 +2,10 @@
 
 Video compression and decompression in hardware.
 
-## References
+# JPEG 
 
-Interesting looking JPEG test suite:
+We currently implement a JPEG encoder and decoder software model and a Hardcaml decoder implementation.
 
-https://github.com/drewnoakes/metadata-extractor-images/tree/master/jpg
+# Tools
+
+oplay is useful for viewing raw YUV images.

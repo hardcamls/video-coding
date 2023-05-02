@@ -1,3 +1,5 @@
+(** Utilities for working with our default clocking approach with synchronous clear. *)
+
 open! Base
 open! Hardcaml
 

@@ -1,3 +1,8 @@
+(** Huffman table decode. 
+    
+    This implements programmable huffman table support for the decoder.
+*)
+
 open! Base
 open Hardcaml
 module Code = Markers.Dht.Code

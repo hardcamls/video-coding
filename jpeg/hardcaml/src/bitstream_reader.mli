@@ -1,4 +1,4 @@
-(** Bitstream decoder.
+(** Bitstream reader.
 
     Shows the next 16 bits of the bitstream.  0-16 bits may be removed from the
     bitstream per cycle.  Output data is not always available.

@@ -1,3 +1,5 @@
+(** Bitstream writer.  Allows writing upto 16 bits into an encoded bitstream. *)
+
 type t
 
 val create : unit -> t

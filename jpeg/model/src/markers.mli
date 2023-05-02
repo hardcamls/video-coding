@@ -1,3 +1,5 @@
+(** JPEG Headers required for baseline encoding. *)
+
 open Base
 module Reader = Bitstream_reader.From_string
 module Writer = Bitstream_writer
@@ -14,7 +16,7 @@ module Component : sig
   val decode : Reader.t -> t
 end
 
-(* start of frame*)
+(** start of frame*)
 module Sof : sig
   type t =
     { length : int
@@ -41,7 +43,7 @@ module Scan_component : sig
   val decode : Reader.t -> t
 end
 
-(* start of scan*)
+(** start of scan *)
 module Sos : sig
   type t =
     { length : int
@@ -58,6 +60,7 @@ module Sos : sig
   val encode : Writer.t -> t -> unit
 end
 
+(** Define quantization table. *)
 module Dqt : sig
   type t =
     { length : int
@@ -69,10 +72,11 @@ module Dqt : sig
 
   val decode : Reader.t -> t
 
-  (** Length is calculated and elements are zigzag'd *)
+  (** Length is calculated.  Elements must be provided in zigzag order. *)
   val encode : Writer.t -> t -> unit
 end
 
+(** Define restart interval. *)
 module Dri : sig
   type t =
     { length : int
@@ -83,6 +87,7 @@ module Dri : sig
   val decode : Reader.t -> t
 end
 
+(** Define huffman table *)
 module Dht : sig
   type t =
     { length : int

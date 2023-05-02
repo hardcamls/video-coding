@@ -1,3 +1,5 @@
+(** JPEG marker code values. *)
+
 open! Base
 
 val sof0 : int

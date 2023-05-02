@@ -1,3 +1,8 @@
+(** Remove stuffing bytes from the entropy coded segment. 
+    
+    Inputs and outputs upto 16 bits per cycle.
+*)
+
 open Hardcaml
 
 module I : sig

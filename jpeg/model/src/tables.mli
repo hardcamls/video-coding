@@ -1,3 +1,5 @@
+(** Luma and chroma huffman table specifications. *)
+
 open Base
 
 (** {2 Default luma and chroma tables.} *)
@@ -30,6 +32,7 @@ module Specification : sig
   val create_ac_code_table : t -> ac_coef list
 end
 
+(** Default huffman tables as provided in the JPEG specification. *)
 module Default : sig
   val dc_luma : Specification.t
   val ac_luma : Specification.t

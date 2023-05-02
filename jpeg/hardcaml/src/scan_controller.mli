@@ -1,3 +1,11 @@
+(** Image and component controller. 
+    
+    Processes the components and scans of an image as specified, and iterates through 
+    the image.
+
+    Controls the decoder datapath.
+*)
+
 open! Base
 open Hardcaml
 

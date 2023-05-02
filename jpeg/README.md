@@ -13,8 +13,7 @@
 # TODO 
 
 * JPEG Encoder
-  - Software model
-    - Probably want this anyway to test various features of the decoder.
+  - flexible scan specs for software model
   - With an encoder we can simplify our feature set dramatically.
   - 4:2:0 (maybe 4:2:2 and mono, but it can be a build time option)
   - Fixed huffman tables
@@ -40,3 +39,9 @@
   - Progressive mode
   - Arithmetic coding
   - Lossless mode
+
+## References
+
+Interesting looking JPEG test suite:
+
+https://github.com/drewnoakes/metadata-extractor-images/tree/master/jpg
