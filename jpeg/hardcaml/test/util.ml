@@ -42,6 +42,8 @@ let find_nth_marker_exn ~n ~marker_code bits =
 
 open Hardcaml_jpeg_model
 
+let mouse480 = "../../test_data/Mouse480.jpg"
+
 let load_jpeg_file filename =
   In_channel.read_all filename |> Bitstream_reader.From_string.create
 ;;

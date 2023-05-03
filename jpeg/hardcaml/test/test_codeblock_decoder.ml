@@ -106,7 +106,7 @@ let test ?(waves = false) filename =
 
 let%expect_test "test" =
   Option.iter
-    (test ~waves:true "Mouse480.jpg")
+    (test ~waves:true Util.mouse480)
     ~f:
       (Waveform.print
          ~display_width:100

@@ -57,7 +57,7 @@ struct
   module Sim = Cyclesim.With_interface (I) (O)
 
   let run () =
-    let jpeg = Util.load_jpeg_file "Mouse480.jpg" in
+    let jpeg = Util.load_jpeg_file Util.mouse480 in
     let bits =
       if second_marker
       then (

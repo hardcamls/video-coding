@@ -245,7 +245,7 @@ let test ?(waves = false) ?(random_ready = false) jpeg =
 ;;
 
 let%expect_test "test reader" =
-  let waves = test ~waves:true ~random_ready:false "Mouse480.jpg" in
+  let waves = test ~waves:true ~random_ready:false Util.mouse480 in
   Option.iter
     waves
     ~f:

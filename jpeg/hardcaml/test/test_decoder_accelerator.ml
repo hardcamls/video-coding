@@ -188,7 +188,7 @@ let test ?(waves = true) ?(error_tolerance = 2) ?num_blocks_to_decode jpeg =
 
 let%expect_test "" =
   let _, waves =
-    test ~waves:true ~num_blocks_to_decode:6 ~error_tolerance:0 "Mouse480.jpg"
+    test ~waves:true ~num_blocks_to_decode:6 ~error_tolerance:0 Util.mouse480
   in
   Option.iter
     waves

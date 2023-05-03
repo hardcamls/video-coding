@@ -14,6 +14,7 @@ val headers_and_entropy_coded_segment
   -> Hardcaml_jpeg_model.Decoder.Header.t * String.t
 
 val remove_stuffing_bytes : String.t -> String.t
+val mouse480 : string
 val load_jpeg_file : string -> Hardcaml_jpeg_model.Bitstream_reader.From_string.t
 
 (** {2 Easy to use bitstream reader module for testbenches.}*)

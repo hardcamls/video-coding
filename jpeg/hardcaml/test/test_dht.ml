@@ -16,7 +16,7 @@ module Dht = Wrapped_marker_decoder (Markers.Dht.Fields) (Markers.Dht)
 
 let test ?(verbose = false) ~start_cycle nth_marker =
   let bits =
-    Util.load_jpeg_file "Mouse480.jpg"
+    Util.load_jpeg_file Util.mouse480
     |> Hardcaml_jpeg_model.Bitstream_reader.From_string.get_buffer
   in
   let dht_bits =

@@ -1,7 +1,7 @@
 (library
  (name hardcaml_jpeg_test)
  (inline_tests
-  (deps Mouse480.jpg))
+  (deps ../../test_data/Mouse480.jpg))
  (libraries
   core
   hardcaml
