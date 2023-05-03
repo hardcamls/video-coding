@@ -1,5 +1,17 @@
 open Core
-open Hardcaml_jpeg_model
+
+include struct
+  open Hardcaml_jpeg_model
+  module Decoder = Decoder
+  module Encoder = Encoder
+end
+
+include struct
+  open Hardcaml_video_common
+  module Frame = Frame
+  module Reader = Bitstream_reader
+  module Writer = Bitstream_writer
+end
 
 let command_decode_header =
   Command.basic
@@ -81,9 +93,9 @@ let command_encode_frame =
       fun () ->
         let frame = Frame.create ~chroma_subsampling:C420 ~width ~height in
         In_channel.with_file yuv ~f:(Frame.input frame);
-        let writer = Bitstream_writer.create () in
+        let writer = Writer.create () in
         Encoder.encode_420 ~frame ~quality ~writer;
-        Out_channel.write_all bits ~data:(Bitstream_writer.get_buffer writer)]
+        Out_channel.write_all bits ~data:(Writer.get_buffer writer)]
 ;;
 
 let command_encode_log =
@@ -97,7 +109,7 @@ let command_encode_log =
       fun () ->
         let frame = Frame.create ~chroma_subsampling:C420 ~width ~height in
         In_channel.with_file yuv ~f:(Frame.input frame);
-        let writer = Bitstream_writer.create () in
+        let writer = Writer.create () in
         let encoder =
           Encoder.For_testing.Sequenced.create_and_write_header
             ~compute_reconstruction_error:verbose

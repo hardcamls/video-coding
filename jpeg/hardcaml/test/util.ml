@@ -1,5 +1,12 @@
 open Core
 
+include struct
+  open Hardcaml_video_common
+  module Frame = Frame
+  module Plane = Plane
+  module Reader = Bitstream_reader
+end
+
 let marker_length bits ~pos =
   List.init 2 ~f:(fun i -> Char.to_int bits.[pos + i])
   |> List.fold ~init:0 ~f:(fun acc a -> (acc lsl 8) lor a)
@@ -43,17 +50,14 @@ let find_nth_marker_exn ~n ~marker_code bits =
 open Hardcaml_jpeg_model
 
 let mouse480 = "../../test_data/Mouse480.jpg"
-
-let load_jpeg_file filename =
-  In_channel.read_all filename |> Bitstream_reader.From_string.create
-;;
+let load_jpeg_file filename = In_channel.read_all filename |> Reader.From_string.create
 
 let headers_and_entropy_coded_segment filename =
   let bits = In_channel.with_file ~binary:true filename ~f:In_channel.input_all in
-  let reader = Bitstream_reader.From_string.create bits in
+  let reader = Reader.From_string.create bits in
   let header = Decoder.Header.decode reader in
   let entropy_bits = Decoder.For_testing.extract_entropy_coded_bits reader in
-  header, Bitstream_reader.From_string.get_buffer entropy_bits
+  header, Reader.From_string.get_buffer entropy_bits
 ;;
 
 let remove_stuffing_bytes bits =

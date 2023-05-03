@@ -1,6 +1,7 @@
 (** JPEG decoding model. *)
 
 open! Base
+open Hardcaml_video_common
 module Bits = Bitstream_reader.From_string
 
 (** Reading the JPEG header segments. *)

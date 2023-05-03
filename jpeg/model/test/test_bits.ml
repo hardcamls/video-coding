@@ -1,7 +1,7 @@
 open! Core
 
 include struct
-  open Hardcaml_jpeg_model
+  open Hardcaml_video_common
   module Reader = Bitstream_reader.From_string
   module Writer = Bitstream_writer
 end

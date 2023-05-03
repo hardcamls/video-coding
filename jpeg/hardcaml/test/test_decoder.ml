@@ -5,10 +5,14 @@ open! Hardcaml_waveterm
 module Sim = Cyclesim.With_interface (Decoder.I) (Decoder.O)
 
 include struct
-  open Hardcaml_jpeg_model
+  open Hardcaml_video_common
   module Frame = Frame
-  module Model = Decoder
   module Reader = Bitstream_reader
+end
+
+include struct
+  open Hardcaml_jpeg_model
+  module Model = Decoder
   module Sexp_util = Util
 end
 

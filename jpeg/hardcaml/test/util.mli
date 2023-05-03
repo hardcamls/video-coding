@@ -15,7 +15,7 @@ val headers_and_entropy_coded_segment
 
 val remove_stuffing_bytes : String.t -> String.t
 val mouse480 : string
-val load_jpeg_file : string -> Hardcaml_jpeg_model.Bitstream_reader.From_string.t
+val load_jpeg_file : string -> Hardcaml_video_common.Bitstream_reader.From_string.t
 
 (** {2 Easy to use bitstream reader module for testbenches.}*)
 
@@ -77,4 +77,4 @@ val load_quant_tables
   -> Hardcaml_jpeg_model.Markers.Dqt.t list
   -> unit
 
-val reconstruct : block_number:int -> Hardcaml_jpeg_model.Frame.t -> int array -> unit
+val reconstruct : block_number:int -> Hardcaml_video_common.Frame.t -> int array -> unit

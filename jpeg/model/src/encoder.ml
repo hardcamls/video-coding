@@ -1,4 +1,5 @@
 open! Base
+open Hardcaml_video_common
 
 (* 
    - Level shift

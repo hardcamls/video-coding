@@ -130,7 +130,7 @@ let test ?(waves = false) data bits =
     cycle ()
   done;
   let cbits =
-    Hardcaml_jpeg_model.Bitstream_reader.From_string.create
+    Hardcaml_video_common.Bitstream_reader.From_string.create
       (String.of_char_list
          (List.init (Array.length data) ~f:(fun i ->
               [ Char.of_int_exn (data.(i) lsr 8); Char.of_int_exn (data.(i) land 0xff) ])
@@ -141,7 +141,7 @@ let test ?(waves = false) data bits =
     then (
       let obits = Bits.to_int !(outputs_before.bits) in
       let hbits = obits lsr (16 - bits) in
-      let cbits = Hardcaml_jpeg_model.Bitstream_reader.From_string.get cbits bits in
+      let cbits = Hardcaml_video_common.Bitstream_reader.From_string.get cbits bits in
       if hbits <> cbits
       then
         print_s

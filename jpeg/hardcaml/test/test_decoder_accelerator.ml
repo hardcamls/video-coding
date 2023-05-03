@@ -4,10 +4,15 @@ open Hardcaml_waveterm
 open Hardcaml_jpeg
 
 include struct
+  open Hardcaml_video_common
+  module Frame = Frame
+  module Reader = Bitstream_reader
+end
+
+include struct
   open Hardcaml_jpeg_model
   module Marker_code = Marker_code
   module Decoder = Decoder
-  module Reader = Bitstream_reader
   module Frame = Frame
   module Sexp_util = Util
 end

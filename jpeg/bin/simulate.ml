@@ -75,7 +75,7 @@ let command_decoder =
         in
         Option.iter yuv ~f:(fun yuv ->
             Out_channel.with_file yuv ~f:(fun yuv ->
-                Hardcaml_jpeg_model.Frame.output frame yuv));
+                Hardcaml_video_common.Frame.output frame yuv));
         Option.iter waves ~f:Hardcaml_waveterm_interactive.run]
 ;;
 
@@ -103,7 +103,7 @@ let command_decoder_accelerator =
         in
         Option.iter yuv ~f:(fun yuv ->
             Out_channel.with_file yuv ~f:(fun yuv ->
-                Hardcaml_jpeg_model.Frame.output frame yuv));
+                Hardcaml_video_common.Frame.output frame yuv));
         Option.iter waves ~f:Hardcaml_waveterm_interactive.run]
 ;;
 

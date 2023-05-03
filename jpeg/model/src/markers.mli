@@ -1,6 +1,7 @@
 (** JPEG Headers required for baseline encoding. *)
 
 open Base
+open Hardcaml_video_common
 module Reader = Bitstream_reader.From_string
 module Writer = Bitstream_writer
 

@@ -1,12 +1,16 @@
 open! Core
 
 include struct
+  open Hardcaml_video_common
+  module Writer = Bitstream_writer
+  module Reader = Bitstream_reader
+end
+
+include struct
   open Hardcaml_jpeg_model
   module Encoder = Encoder
   module Quant_tables = Quant_tables
   module Tables = Tables
-  module Writer = Bitstream_writer
-  module Reader = Bitstream_reader
   module Decoder = Decoder
 end
 

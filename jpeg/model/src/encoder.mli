@@ -1,6 +1,7 @@
 (** JPEG Encoder model. *)
 
 open Base
+open Hardcaml_video_common
 
 (** A run length coded value from a quantized block. *)
 module Rle : sig

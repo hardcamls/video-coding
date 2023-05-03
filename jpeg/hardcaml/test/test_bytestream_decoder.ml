@@ -159,7 +159,7 @@ let read_header
 
 let test ?(waves = false) ?(random_ready = false) jpeg =
   let jpeg = Util.load_jpeg_file jpeg in
-  let bits = Hardcaml_jpeg_model.Bitstream_reader.From_string.get_buffer jpeg in
+  let bits = Hardcaml_video_common.Bitstream_reader.From_string.get_buffer jpeg in
   let expected_entropy_coded_segment =
     Test_decoder_accelerator.get_entropy_coded_segment bits |> Util.remove_stuffing_bytes
   in

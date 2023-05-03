@@ -65,17 +65,17 @@ struct
           Util.find_next_marker_exn
             ~start_pos:0
             ~marker_code
-            (Hardcaml_jpeg_model.Bitstream_reader.From_string.get_buffer jpeg)
+            (Hardcaml_video_common.Bitstream_reader.From_string.get_buffer jpeg)
         in
         Util.extract_next_marker_exn
           ~start_pos:(pos + 2)
           ~marker_code
-          (Hardcaml_jpeg_model.Bitstream_reader.From_string.get_buffer jpeg))
+          (Hardcaml_video_common.Bitstream_reader.From_string.get_buffer jpeg))
       else
         Util.extract_next_marker_exn
           ~start_pos:0
           ~marker_code
-          (Hardcaml_jpeg_model.Bitstream_reader.From_string.get_buffer jpeg)
+          (Hardcaml_video_common.Bitstream_reader.From_string.get_buffer jpeg)
     in
     print_s [%message (bits : String.Hexdump.t)];
     let sim = Sim.create (create ~bits (Scope.create ())) in

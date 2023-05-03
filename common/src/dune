@@ -1,0 +1,6 @@
+(library
+ (name hardcaml_video_common)
+ (public_name hardcaml_video_codecs.common)
+ (libraries base stdio)
+ (preprocess
+  (pps ppx_jane)))

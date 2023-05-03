@@ -1,4 +1,5 @@
 open! Base
+open Hardcaml_video_common
 module Bits = Bitstream_reader.From_string
 
 module Header = struct
