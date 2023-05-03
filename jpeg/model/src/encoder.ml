@@ -288,7 +288,7 @@ let write_sos writer =
            }
         |]
     ; start_of_predictor_selection = 0
-    ; end_of_predictor_selection = 0
+    ; end_of_predictor_selection = 63
     ; successive_approximation_bit_high = 0
     ; successive_approximation_bit_low = 0
     }
