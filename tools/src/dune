@@ -1,0 +1,6 @@
+(library
+ (name hardcaml_video_tools)
+ (libraries core core_unix tsdl hardcaml_video_common)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane)))

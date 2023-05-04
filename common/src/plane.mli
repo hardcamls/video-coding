@@ -8,6 +8,11 @@ type t
 (** Create a [width*height] block of memory to hold the pixel data. *)
 val create : width:int -> height:int -> t
 
+(** Create a copy *)
+val copy : t -> t
+
+val blit : src:t -> dst:t -> unit
+
 (** Plane width *)
 val width : t -> int
 

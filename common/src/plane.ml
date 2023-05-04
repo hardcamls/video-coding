@@ -7,11 +7,17 @@ type t =
   }
 [@@deriving fields]
 
-let create ~width ~height =
-  { width
-  ; height
-  ; plane = Bigarray.Array1.create Bigarray.char Bigarray.c_layout (width * height)
-  }
+let alloc ~width ~height =
+  Bigarray.Array1.create Bigarray.char Bigarray.c_layout (width * height)
+;;
+
+let create ~width ~height = { width; height; plane = alloc ~width ~height }
+let blit ~src ~dst = Bigarray.Array1.blit src.plane dst.plane
+
+let copy src =
+  let dst = create ~width:src.width ~height:src.height in
+  blit ~src ~dst;
+  dst
 ;;
 
 let ( .!() ) t index = Bigarray.Array1.get t.plane index

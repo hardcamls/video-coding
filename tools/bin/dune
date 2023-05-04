@@ -1,0 +1,6 @@
+(executables
+ (names oplay)
+ (promote)
+ (libraries hardcaml_video_tools core core_unix.command_unix)
+ (preprocess
+  (pps ppx_jane)))
