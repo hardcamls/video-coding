@@ -59,22 +59,22 @@ module Yuv = struct
   let crop ~x_pos ~y_pos ~(src : t) ~(dst : t) =
     let width_dst = Plane.width dst.y in
     let height_dst = Plane.height dst.y in
-    let width_src = Plane.width dst.y in
-    let height_src = Plane.height dst.y in
-    for row_dst = 0 to width_dst - 1 do
-      for col_dst = 0 to height_dst - 1 do
+    let width_src = Plane.width src.y in
+    let height_src = Plane.height src.y in
+    for row_dst = 0 to height_dst - 1 do
+      for col_dst = 0 to width_dst - 1 do
         (* Clip to within src image *)
-        let col = col_dst - x_pos in
+        let col = col_dst + x_pos in
         let col =
           if col < 0 then 0 else if col >= width_src then width_src - 1 else col
         in
-        let row = row_dst - x_pos in
+        let row = row_dst + y_pos in
         let row =
           if row < 0 then 0 else if row >= height_src then height_src - 1 else row
         in
-        Plane.(dst.y.![row, col] <- src.y.![row + x_pos, col + y_pos]);
-        Plane.(dst.u.![row, col] <- src.u.![row + x_pos, col + y_pos]);
-        Plane.(dst.v.![row, col] <- src.v.![row + x_pos, col + y_pos])
+        Plane.(dst.y.![col_dst, row_dst] <- src.y.![col, row]);
+        Plane.(dst.u.![col_dst, row_dst] <- src.u.![col, row]);
+        Plane.(dst.v.![col_dst, row_dst] <- src.v.![col, row])
       done
     done
   ;;
@@ -82,11 +82,11 @@ module Yuv = struct
   let _pad ~x_pos ~y_pos ~(src : t) ~(dst : t) =
     let width = Plane.width dst.y in
     let height = Plane.height dst.y in
-    for row = 0 to width - 1 do
-      for col = 0 to height - 1 do
-        Plane.(dst.y.![row, col] <- src.y.![row + x_pos, col + y_pos]);
-        Plane.(dst.u.![row, col] <- src.u.![row + x_pos, col + y_pos]);
-        Plane.(dst.v.![row, col] <- src.v.![row + x_pos, col + y_pos])
+    for row = 0 to height - 1 do
+      for col = 0 to width - 1 do
+        Plane.(dst.y.![col, row] <- src.y.![col + y_pos, row + x_pos]);
+        Plane.(dst.u.![col, row] <- src.u.![col + y_pos, row + x_pos]);
+        Plane.(dst.v.![col, row] <- src.v.![col + y_pos, row + x_pos])
       done
     done
   ;;
@@ -623,9 +623,29 @@ module Range = struct
   let arg_type =
     Command.Arg_type.create (fun s ->
         try
-          match String.split ~on:'x' s with
+          match String.split_on_chars ~on:[ 'x'; ','; '-' ] s with
+          | [ start ] -> { start = Int.of_string start; end_ = Int.of_string start }
           | [ ""; end_ ] -> { start = 0; end_ = Int.of_string end_ }
           | [ start; end_ ] -> { start = Int.of_string start; end_ = Int.of_string end_ }
+          | _ -> raise Caml.Not_found
+        with
+        | _ -> raise_s [%message "Invalid frame size specified" (s : string)])
+  ;;
+end
+
+module Offset = struct
+  type t =
+    { x_off : int
+    ; y_off : int
+    }
+  [@@deriving sexp_of]
+
+  let arg_type =
+    Command.Arg_type.create (fun s ->
+        try
+          match String.split_on_chars ~on:[ 'x'; ','; '-' ] s with
+          | [ x_off; y_off ] ->
+            { x_off = Int.of_string x_off; y_off = Int.of_string y_off }
           | _ -> raise Caml.Not_found
         with
         | _ -> raise_s [%message "Invalid frame size specified" (s : string)])
@@ -636,6 +656,7 @@ type t =
   { in_file : string
   ; out_file : string
   ; src : frame
+  ; src_offset : Offset.t
   ; dst : frame
   ; frames : Range.t
   }
@@ -648,7 +669,7 @@ let arg =
     let in_file = anon ("IN-FILE" %: string)
     and size_in = anon ("IN-SIZE" %: Size.arg_type)
     and out_file = anon ("OUT-FILE" %: string)
-    and size_out = anon (maybe ("IN-SIZE" %: Size.arg_type))
+    and size_out = anon (maybe ("OUT-SIZE" %: Size.arg_type))
     and frames =
       flag
         "-frames"
@@ -656,10 +677,17 @@ let arg =
         ~doc:""
     and format_in =
       flag "-format" (optional_with_default default_format Format.arg_type) ~doc:""
-    and format_out = flag "-out-format" (optional Format.arg_type) ~doc:"" in
+    and format_out = flag "-out-format" (optional Format.arg_type) ~doc:""
+    and src_offset =
+      flag
+        "-src-offset"
+        (optional_with_default { Offset.x_off = 0; y_off = 0 } Offset.arg_type)
+        ~doc:""
+    in
     { in_file
     ; out_file
     ; src = { format = format_in; size = size_in }
+    ; src_offset
     ; dst =
         { format = Option.value ~default:format_in format_out
         ; size = Option.value ~default:size_in size_out
@@ -683,7 +711,7 @@ let with_out_file file ~f =
 let main t =
   let input_pipe = Format.create t.src.size t.src.format in
   let input_frame = Yuv.create_444 ~width:t.src.size.width ~height:t.src.size.height in
-  let output_pipe = Format.create t.src.size t.src.format in
+  let output_pipe = Format.create t.dst.size t.src.format in
   let output_frame = Yuv.create_444 ~width:t.dst.size.width ~height:t.dst.size.height in
   with_in_file t.in_file ~f:(fun in_file ->
       with_out_file t.out_file ~f:(fun out_file ->
@@ -694,7 +722,11 @@ let main t =
               for _ = 0 to t.frames.end_ - t.frames.start do
                 if Format.input in_file input_frame input_pipe
                 then (
-                  Yuv.crop ~x_pos:0 ~y_pos:0 ~src:input_frame ~dst:output_frame;
+                  Yuv.crop
+                    ~x_pos:t.src_offset.x_off
+                    ~y_pos:t.src_offset.y_off
+                    ~src:input_frame
+                    ~dst:output_frame;
                   Format.output out_file output_frame output_pipe)
                 else return ()
               done)))
