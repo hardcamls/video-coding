@@ -73,23 +73,6 @@ module Plane_mode = struct
   ;;
 end
 
-module Size = struct
-  type t =
-    { width : int
-    ; height : int
-    }
-
-  let of_string s =
-    match List.find Stdsizes.sizes ~f:(fun (s', _, _, _) -> String.equal s s') with
-    | Some (_, width, height, _) -> { width; height }
-    | None ->
-      (match String.split ~on:'x' s with
-      | [ width; height ] ->
-        { width = Int.of_string width; height = Int.of_string height }
-      | _ -> raise_s [%message "Invalid frame size specified" (s : string)])
-  ;;
-end
-
 type t =
   { in_file : string option
   ; diff_file : string option
@@ -103,38 +86,6 @@ type t =
   ; mutable show_plane : Plane_mode.t
   ; verbose : bool
   }
-
-(* command line parsing *)
-module Arg = struct
-  let arg =
-    [%map_open.Command
-      let size = anon ("SIZE" %: Arg_type.create Size.of_string)
-      and in_file = anon (maybe ("IN-FILE-IN" %: string))
-      and diff_file = flag "-diff" (optional string) ~doc:" file to diff against"
-      and size_out =
-        flag "-s" (optional (Arg_type.create Size.of_string)) ~doc:" display size"
-      and format =
-        flag
-          "-f"
-          (optional_with_default Yuv_format.C420 (Arg_type.create Yuv_format.of_string))
-          ~doc:" YUV format"
-      and framerate = flag "-r" (optional_with_default 30 int) ~doc:" frame rate"
-      and fullscreen = flag "-d" no_arg ~doc:" start in fullscreen mode"
-      and verbose = flag "-v" no_arg ~doc:" verbose" in
-      { in_file
-      ; diff_file
-      ; size
-      ; size_out = Option.value size_out ~default:size
-      ; format
-      ; framerate
-      ; fullscreen
-      ; grid = false
-      ; diff_mode = Diff_mode.NoDiff
-      ; show_plane = Plane_mode.All
-      ; verbose
-      }]
-  ;;
-end
 
 type ba = (int, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
 type ba2 = (int, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array2.t
@@ -605,6 +556,7 @@ let main t =
     exit (-1)
 ;;
 
+(* command line *)
 let readme () =
   {|
  
@@ -632,4 +584,32 @@ luma/colour planes can be shown seperately.
   d        toggle differencfe mode 
   g        overlay 16x15 grid
   |}
+;;
+
+let arg =
+  [%map_open.Command
+    let size = anon ("SIZE" %: Size.arg_type)
+    and in_file = anon (maybe ("IN-FILE-IN" %: string))
+    and diff_file = flag "-diff" (optional string) ~doc:" file to diff against"
+    and size_out = flag "-s" (optional Size.arg_type) ~doc:" display size"
+    and format =
+      flag
+        "-f"
+        (optional_with_default Yuv_format.C420 (Arg_type.create Yuv_format.of_string))
+        ~doc:" YUV format"
+    and framerate = flag "-r" (optional_with_default 30 int) ~doc:" frame rate"
+    and fullscreen = flag "-d" no_arg ~doc:" start in fullscreen mode"
+    and verbose = flag "-v" no_arg ~doc:" verbose" in
+    { in_file
+    ; diff_file
+    ; size
+    ; size_out = Option.value size_out ~default:size
+    ; format
+    ; framerate
+    ; fullscreen
+    ; grid = false
+    ; diff_mode = Diff_mode.NoDiff
+    ; show_plane = Plane_mode.All
+    ; verbose
+    }]
 ;;

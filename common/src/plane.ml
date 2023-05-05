@@ -33,10 +33,15 @@ let output t out_channel =
   done
 ;;
 
+exception End_of_image
+
 let input t in_channel =
   for y = 0 to t.height - 1 do
     for x = 0 to t.width - 1 do
-      t.![x, y] <- Stdio.In_channel.input_char in_channel |> Option.value_exn
+      t.![x, y]
+        <- (match Stdio.In_channel.input_char in_channel with
+           | Some x -> x
+           | None -> raise End_of_image)
     done
   done
 ;;

@@ -43,6 +43,53 @@ module Yuv = struct
     dump f.u;
     dump f.v
   ;;
+
+  (* let ( .![] ) p (x, y) =
+    let x = max 0 (min (Plane.width p - 1) x) in
+    let y = max 0 (min (Plane.height p - 1) y) in
+    Plane.(p.![x, y])
+  ;;
+
+  let ( .![]<- ) p (x, y) value =
+    let x = max 0 (min (Plane.width p - 1) x) in
+    let y = max 0 (min (Plane.height p - 1) y) in
+    Plane.(p.![x, y] <- value)
+  ;; *)
+
+  let crop ~x_pos ~y_pos ~(src : t) ~(dst : t) =
+    let width_dst = Plane.width dst.y in
+    let height_dst = Plane.height dst.y in
+    let width_src = Plane.width dst.y in
+    let height_src = Plane.height dst.y in
+    for row_dst = 0 to width_dst - 1 do
+      for col_dst = 0 to height_dst - 1 do
+        (* Clip to within src image *)
+        let col = col_dst - x_pos in
+        let col =
+          if col < 0 then 0 else if col >= width_src then width_src - 1 else col
+        in
+        let row = row_dst - x_pos in
+        let row =
+          if row < 0 then 0 else if row >= height_src then height_src - 1 else row
+        in
+        Plane.(dst.y.![row, col] <- src.y.![row + x_pos, col + y_pos]);
+        Plane.(dst.u.![row, col] <- src.u.![row + x_pos, col + y_pos]);
+        Plane.(dst.v.![row, col] <- src.v.![row + x_pos, col + y_pos])
+      done
+    done
+  ;;
+
+  let _pad ~x_pos ~y_pos ~(src : t) ~(dst : t) =
+    let width = Plane.width dst.y in
+    let height = Plane.height dst.y in
+    for row = 0 to width - 1 do
+      for col = 0 to height - 1 do
+        Plane.(dst.y.![row, col] <- src.y.![row + x_pos, col + y_pos]);
+        Plane.(dst.u.![row, col] <- src.u.![row + x_pos, col + y_pos]);
+        Plane.(dst.v.![row, col] <- src.v.![row + x_pos, col + y_pos])
+      done
+    done
+  ;;
 end
 
 module Planar_444 = struct
@@ -78,27 +125,49 @@ module Planar_444 = struct
   ;;
 
   let assert_is_444 (yuv : Yuv.t) =
-    assert (Plane.width yuv.y = Plane.width yuv.u);
-    assert (Plane.width yuv.y = Plane.width yuv.v);
-    assert (Plane.height yuv.y = Plane.height yuv.u);
-    assert (Plane.height yuv.y = Plane.height yuv.v)
+    let wy, hy = Plane.width yuv.y, Plane.height yuv.y in
+    let wu, hu = Plane.width yuv.u, Plane.height yuv.u in
+    let wv, hv = Plane.width yuv.v, Plane.height yuv.v in
+    if not (wy = wu && wu = wv && hy = hu && hu = hv)
+    then
+      raise_s
+        [%message
+          "Expecting a 4:4:4 frame"
+            (wy, hy : int * int)
+            (wu, hu : int * int)
+            (wv, hv : int * int)]
   ;;
 
   let assert_is_422 (yuv : Yuv.t) =
-    assert (Plane.width yuv.y = Plane.width yuv.u * 2);
-    assert (Plane.width yuv.y = Plane.width yuv.v * 2);
-    assert (Plane.height yuv.y = Plane.height yuv.u);
-    assert (Plane.height yuv.y = Plane.height yuv.v)
+    let wy, hy = Plane.width yuv.y, Plane.height yuv.y in
+    let wu, hu = Plane.width yuv.u, Plane.height yuv.u in
+    let wv, hv = Plane.width yuv.v, Plane.height yuv.v in
+    if not (wy = wu * 2 && wu = wv && hy = hu && hu = hv)
+    then
+      raise_s
+        [%message
+          "Expecting a 4:2:2 frame"
+            (wy, hy : int * int)
+            (wu, hu : int * int)
+            (wv, hv : int * int)]
   ;;
 
   let assert_is_420 (yuv : Yuv.t) =
-    assert (Plane.width yuv.y = Plane.width yuv.u * 2);
-    assert (Plane.width yuv.y = Plane.width yuv.v * 2);
-    assert (Plane.height yuv.y = Plane.height yuv.u * 2);
-    assert (Plane.height yuv.y = Plane.height yuv.v * 2)
+    let wy, hy = Plane.width yuv.y, Plane.height yuv.y in
+    let wu, hu = Plane.width yuv.u, Plane.height yuv.u in
+    let wv, hv = Plane.width yuv.v, Plane.height yuv.v in
+    if not (wy = wu * 2 && wu = wv && hy = hu * 2 && hu = hv)
+    then
+      raise_s
+        [%message
+          "Expecting a 4:2:0 frame"
+            (wy, hy : int * int)
+            (wu, hu : int * int)
+            (wv, hv : int * int)]
   ;;
 
   let convert_to_422 ~(src : Yuv.t) ~(dst : Yuv.t) =
+    assert_is_444 src;
     assert_is_422 dst;
     let height = Plane.height src.y in
     Plane.blit ~src:src.y ~dst:dst.y;
@@ -115,6 +184,7 @@ module Planar_444 = struct
   ;;
 
   let convert_from_422 ~(src : Yuv.t) ~(dst : Yuv.t) =
+    assert_is_422 src;
     assert_is_444 dst;
     let height = Plane.height src.y in
     Plane.blit ~src:src.y ~dst:dst.y;
@@ -168,6 +238,7 @@ module Planar_444 = struct
 
   let convert_to_420 ~(src : Yuv.t) ~(dst : Yuv.t) =
     assert_is_420 dst;
+    assert_is_444 src;
     let height = Plane.height src.y in
     Plane.blit ~src:src.y ~dst:dst.y;
     for row = 0 to (height / 2) - 1 do
@@ -184,6 +255,7 @@ module Planar_444 = struct
 
   let convert_from_420 ~(src : Yuv.t) ~(dst : Yuv.t) =
     assert_is_420 src;
+    assert_is_444 dst;
     let height = Plane.height src.y in
     Plane.blit ~src:src.y ~dst:dst.y;
     for row = 0 to (height / 2) - 1 do
@@ -193,7 +265,6 @@ module Planar_444 = struct
   ;;
 
   let of_420 (src : Yuv.t) =
-    assert_is_420 src;
     let dst = Yuv.create_444 ~width:(Plane.width src.y) ~height:(Plane.height src.y) in
     convert_from_420 ~src ~dst;
     dst
@@ -227,34 +298,34 @@ module Planar_444 = struct
     Yuv.dump_yuv f422;
     [%expect
       {|
-      0  10  20  30
-      1  11  21  31
-      2  12  22  32
-      3  13  23  33
-     55  75
-     56  76
-     57  77
-     58  78
-    105 125
-    106 126
-    107 127
-    108 128 |}];
+        0  10  20  30
+        1  11  21  31
+        2  12  22  32
+        3  13  23  33
+       55  75
+       56  76
+       57  77
+       58  78
+      105 125
+      106 126
+      107 127
+      108 128 |}];
     let f444 = of_422 f422 in
     Yuv.dump_yuv f444;
     [%expect
       {|
-      0  10  20  30
-      1  11  21  31
-      2  12  22  32
-      3  13  23  33
-     55  65  75  75
-     56  66  76  76
-     57  67  77  77
-     58  68  78  78
-    105 115 125 125
-    106 116 126 126
-    107 117 127 127
-    108 118 128 128 |}]
+        0  10  20  30
+        1  11  21  31
+        2  12  22  32
+        3  13  23  33
+       55  65  75  75
+       56  66  76  76
+       57  67  77  77
+       58  68  78  78
+      105 115 125 125
+      106 116 126 126
+      107 117 127 127
+      108 118 128 128 |}]
   ;;
 
   let%expect_test "444<->420" =
@@ -285,17 +356,18 @@ module Planar_444 = struct
     Yuv.dump_yuv f420;
     [%expect
       {|
-      0  10  20  30
-      1  11  21  31
-      2  12  22  32
-      3  13  23  33
-     56  76
-     58  78
-    106 126
-    108 128 |}];
+        0  10  20  30
+        1  11  21  31
+        2  12  22  32
+        3  13  23  33
+       56  76
+       58  78
+      106 126
+      108 128 |}];
     let f444 = of_420 f420 in
     Yuv.dump_yuv f444;
-    [%expect{|
+    [%expect
+      {|
         0  10  20  30
         1  11  21  31
         2  12  22  32
@@ -414,3 +486,216 @@ module Packed_422 = struct
       103 113 |}]
   ;;
 end
+
+module Format = struct
+  module Packed = struct
+    type t =
+      | YUY2
+      | UYVY
+      | YVYU
+    [@@deriving sexp_of]
+
+    let get_format = function
+      | YUY2 -> Packed_422.yuy2
+      | UYVY -> Packed_422.uyvy
+      | YVYU -> Packed_422.yvyu
+    ;;
+
+    let create { Size.width; height } = Plane.create ~width:(width * 2) ~height
+    let input file p = Plane.input p file
+    let output file p = Plane.output p file
+  end
+
+  module Planar = struct
+    type t =
+      | C420
+      | C422
+      | C444
+    [@@deriving sexp_of]
+
+    let create { Size.width; height } ~fmt =
+      let cwidth =
+        match fmt with
+        | C420 | C422 -> width / 2
+        | C444 -> width
+      in
+      let cheight =
+        match fmt with
+        | C420 -> height / 2
+        | C422 | C444 -> height
+      in
+      { Yuv.y = Plane.create ~width ~height
+      ; u = Plane.create ~width:cwidth ~height:cheight
+      ; v = Plane.create ~width:cwidth ~height:cheight
+      }
+    ;;
+
+    let input file { Yuv.y; u; v } =
+      Plane.input y file;
+      Plane.input u file;
+      Plane.input v file
+    ;;
+
+    let output file { Yuv.y; u; v } =
+      Plane.output y file;
+      Plane.output u file;
+      Plane.output v file
+    ;;
+  end
+
+  type ('packed, 'planar) t =
+    | Packed of 'packed
+    | Planar of 'planar
+  [@@deriving sexp_of]
+
+  type packed_or_planar = (Packed.t, Planar.t) t [@@deriving sexp_of]
+
+  let arg_type =
+    Command.Arg_type.create (fun s ->
+        match String.uppercase s with
+        | "420" -> Planar Planar.C420
+        | "422" -> Planar Planar.C422
+        | "444" -> Planar Planar.C444
+        | "YUY2" -> Packed Packed.YUY2
+        | "UYVY" -> Packed Packed.UYVY
+        | "YVYU" -> Packed Packed.YVYU
+        | _ -> raise_s [%message "Invalid YUV format"])
+  ;;
+
+  let create size fmt =
+    match fmt with
+    | Packed fmt -> Packed (fmt, size, Packed.create size, Planar.create size ~fmt:C422)
+    | Planar fmt -> Planar (fmt, size, Planar.create size ~fmt)
+  ;;
+
+  (* Read frame and convert to y444 format. *)
+  let input file y444 = function
+    | Packed (fmt, _, src, y422) ->
+      Packed.input file src;
+      Packed_422.convert_to_planar (Packed.get_format fmt) ~src ~dst:y422;
+      Planar_444.convert_from_422 ~src:y422 ~dst:y444
+    | Planar (Planar.C420, _, src) ->
+      Planar_444.assert_is_420 src;
+      Planar.input file src;
+      Planar_444.convert_from_420 ~src ~dst:y444
+    | Planar (Planar.C422, _, src) ->
+      Planar.input file src;
+      Planar_444.convert_from_422 ~src ~dst:y444
+    | Planar (Planar.C444, _, _) -> Planar.input file y444
+  ;;
+
+  let input file y444 i =
+    try
+      input file y444 i;
+      true
+    with
+    | Plane.End_of_image -> false
+  ;;
+
+  let output file y444 = function
+    | Packed (fmt, _, dst, y422) ->
+      Planar_444.convert_to_422 ~src:y444 ~dst:y422;
+      Packed_422.convert_from_planar (Packed.get_format fmt) ~src:y422 ~dst;
+      Packed.output file dst
+    | Planar (Planar.C420, _, dst) ->
+      Planar_444.convert_to_420 ~src:y444 ~dst;
+      Planar.output file dst
+    | Planar (Planar.C422, _, dst) ->
+      Planar_444.convert_to_422 ~src:y444 ~dst;
+      Planar.output file dst
+    | Planar (Planar.C444, _, _) -> Planar.output file y444
+  ;;
+end
+
+type frame =
+  { format : Format.packed_or_planar
+  ; size : Size.t
+  }
+[@@deriving sexp_of]
+
+module Range = struct
+  type t =
+    { start : int
+    ; end_ : int
+    }
+  [@@deriving sexp_of]
+
+  let arg_type =
+    Command.Arg_type.create (fun s ->
+        try
+          match String.split ~on:'x' s with
+          | [ ""; end_ ] -> { start = 0; end_ = Int.of_string end_ }
+          | [ start; end_ ] -> { start = Int.of_string start; end_ = Int.of_string end_ }
+          | _ -> raise Caml.Not_found
+        with
+        | _ -> raise_s [%message "Invalid frame size specified" (s : string)])
+  ;;
+end
+
+type t =
+  { in_file : string
+  ; out_file : string
+  ; src : frame
+  ; dst : frame
+  ; frames : Range.t
+  }
+[@@deriving sexp_of]
+
+let default_format = Format.Planar Format.Planar.C420
+
+let arg =
+  [%map_open.Command
+    let in_file = anon ("IN-FILE" %: string)
+    and size_in = anon ("IN-SIZE" %: Size.arg_type)
+    and out_file = anon ("OUT-FILE" %: string)
+    and size_out = anon (maybe ("IN-SIZE" %: Size.arg_type))
+    and frames =
+      flag
+        "-frames"
+        (optional_with_default { Range.start = 0; end_ = 0 } Range.arg_type)
+        ~doc:""
+    and format_in =
+      flag "-format" (optional_with_default default_format Format.arg_type) ~doc:""
+    and format_out = flag "-out-format" (optional Format.arg_type) ~doc:"" in
+    { in_file
+    ; out_file
+    ; src = { format = format_in; size = size_in }
+    ; dst =
+        { format = Option.value ~default:format_in format_out
+        ; size = Option.value ~default:size_in size_out
+        }
+    ; frames
+    }]
+;;
+
+let with_in_file file ~f =
+  match file with
+  | "-" -> f In_channel.stdin
+  | _ -> In_channel.with_file file ~f
+;;
+
+let with_out_file file ~f =
+  match file with
+  | "-" -> f Out_channel.stdout
+  | _ -> Out_channel.with_file file ~f
+;;
+
+let main t =
+  let input_pipe = Format.create t.src.size t.src.format in
+  let input_frame = Yuv.create_444 ~width:t.src.size.width ~height:t.src.size.height in
+  let output_pipe = Format.create t.src.size t.src.format in
+  let output_frame = Yuv.create_444 ~width:t.dst.size.width ~height:t.dst.size.height in
+  with_in_file t.in_file ~f:(fun in_file ->
+      with_out_file t.out_file ~f:(fun out_file ->
+          With_return.with_return (fun { return } ->
+              for _ = 0 to t.frames.start - 1 do
+                if not (Format.input in_file input_frame input_pipe) then return ()
+              done;
+              for _ = 0 to t.frames.end_ - t.frames.start do
+                if Format.input in_file input_frame input_pipe
+                then (
+                  Yuv.crop ~x_pos:0 ~y_pos:0 ~src:input_frame ~dst:output_frame;
+                  Format.output out_file output_frame output_pipe)
+                else return ()
+              done)))
+;;

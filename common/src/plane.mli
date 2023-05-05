@@ -34,5 +34,7 @@ val ( .![]<- ) : t -> int * int -> char -> unit
 (** Write plane to a file *)
 val output : t -> Stdio.Out_channel.t -> unit
 
+exception End_of_image
+
 (** Read plane from a file. *)
 val input : t -> Stdio.In_channel.t -> unit

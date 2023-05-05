@@ -43,3 +43,8 @@ module Packed_422 : sig
   val to_planar : packed_yuv_format -> Plane.t -> Yuv.t
   val of_planar : packed_yuv_format -> Yuv.t -> Plane.t
 end
+
+type t
+
+val arg : t Command.Param.t
+val main : t -> unit

@@ -1,5 +1,5 @@
 (executables
- (names oplay)
+ (names oyuv)
  (promote)
  (libraries hardcaml_video_tools core core_unix.command_unix)
  (preprocess
