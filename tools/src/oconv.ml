@@ -711,7 +711,7 @@ let with_out_file file ~f =
 let main t =
   let input_pipe = Format.create t.src.size t.src.format in
   let input_frame = Yuv.create_444 ~width:t.src.size.width ~height:t.src.size.height in
-  let output_pipe = Format.create t.dst.size t.src.format in
+  let output_pipe = Format.create t.dst.size t.dst.format in
   let output_frame = Yuv.create_444 ~width:t.dst.size.width ~height:t.dst.size.height in
   with_in_file t.in_file ~f:(fun in_file ->
       with_out_file t.out_file ~f:(fun out_file ->
