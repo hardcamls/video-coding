@@ -22,6 +22,13 @@ module Yuv = struct
     }
   ;;
 
+  let create_420 ~width ~height =
+    { y = Plane.create ~width ~height
+    ; u = Plane.create ~width:(width / 2) ~height:(height / 2)
+    ; v = Plane.create ~width:(width / 2) ~height:(height / 2)
+    }
+  ;;
+
   let dump (p : Plane.t) =
     for row = 0 to Plane.height p - 1 do
       for col = 0 to Plane.width p - 1 do
@@ -70,29 +77,57 @@ module Planar_444 = struct
     Plane.(dst.![(w * 2) - 1, row] <- src.![w - 1, row])
   ;;
 
-  let to_unpacked_422 (src : Yuv.t) =
-    let width = Plane.width src.y in
-    let height = Plane.height src.y in
-    let y = Plane.copy src.y in
-    let u = Plane.create ~width:(width / 2) ~height in
-    let v = Plane.create ~width:(width / 2) ~height in
-    for row = 0 to height - 1 do
-      subsample_h2 ~src:src.u ~dst:u ~row;
-      subsample_h2 ~src:src.v ~dst:v ~row
-    done;
-    { Yuv.y; u; v }
+  let assert_is_444 (yuv : Yuv.t) =
+    assert (Plane.width yuv.y = Plane.width yuv.u);
+    assert (Plane.width yuv.y = Plane.width yuv.v);
+    assert (Plane.height yuv.y = Plane.height yuv.u);
+    assert (Plane.height yuv.y = Plane.height yuv.v)
   ;;
 
-  let of_unpacked_422 (src : Yuv.t) =
-    let width = Plane.width src.y in
+  let assert_is_422 (yuv : Yuv.t) =
+    assert (Plane.width yuv.y = Plane.width yuv.u * 2);
+    assert (Plane.width yuv.y = Plane.width yuv.v * 2);
+    assert (Plane.height yuv.y = Plane.height yuv.u);
+    assert (Plane.height yuv.y = Plane.height yuv.v)
+  ;;
+
+  let assert_is_420 (yuv : Yuv.t) =
+    assert (Plane.width yuv.y = Plane.width yuv.u * 2);
+    assert (Plane.width yuv.y = Plane.width yuv.v * 2);
+    assert (Plane.height yuv.y = Plane.height yuv.u * 2);
+    assert (Plane.height yuv.y = Plane.height yuv.v * 2)
+  ;;
+
+  let convert_to_422 ~(src : Yuv.t) ~(dst : Yuv.t) =
+    assert_is_422 dst;
     let height = Plane.height src.y in
-    let o = Yuv.create_444 ~width ~height in
-    Plane.blit ~src:src.y ~dst:o.y;
+    Plane.blit ~src:src.y ~dst:dst.y;
     for row = 0 to height - 1 do
-      supersample_h2 ~src:src.u ~dst:o.u ~row;
-      supersample_h2 ~src:src.v ~dst:o.v ~row
-    done;
-    o
+      subsample_h2 ~src:src.u ~dst:dst.u ~row;
+      subsample_h2 ~src:src.v ~dst:dst.v ~row
+    done
+  ;;
+
+  let to_422 (src : Yuv.t) =
+    let dst = Yuv.create_422 ~width:(Plane.width src.y) ~height:(Plane.height src.y) in
+    convert_to_422 ~src ~dst;
+    dst
+  ;;
+
+  let convert_from_422 ~(src : Yuv.t) ~(dst : Yuv.t) =
+    assert_is_444 dst;
+    let height = Plane.height src.y in
+    Plane.blit ~src:src.y ~dst:dst.y;
+    for row = 0 to height - 1 do
+      supersample_h2 ~src:src.u ~dst:dst.u ~row;
+      supersample_h2 ~src:src.v ~dst:dst.v ~row
+    done
+  ;;
+
+  let of_422 (src : Yuv.t) =
+    let dst = Yuv.create_444 ~width:(Plane.width src.y) ~height:(Plane.height src.y) in
+    convert_from_422 ~src ~dst;
+    dst
   ;;
 
   let subsample_hv2 ~src ~dst ~row =
@@ -131,29 +166,37 @@ module Planar_444 = struct
     Plane.(dst.![(w * 2) - 1, (row * 2) + 1] <- avg2 a b)
   ;;
 
-  let to_unpacked_420 (src : Yuv.t) =
-    let width = Plane.width src.y in
+  let convert_to_420 ~(src : Yuv.t) ~(dst : Yuv.t) =
+    assert_is_420 dst;
     let height = Plane.height src.y in
-    let y = Plane.copy src.y in
-    let u = Plane.create ~width:(width / 2) ~height:(height / 2) in
-    let v = Plane.create ~width:(width / 2) ~height:(height / 2) in
+    Plane.blit ~src:src.y ~dst:dst.y;
     for row = 0 to (height / 2) - 1 do
-      subsample_hv2 ~src:src.u ~dst:u ~row;
-      subsample_hv2 ~src:src.v ~dst:v ~row
-    done;
-    { Yuv.y; u; v }
+      subsample_hv2 ~src:src.u ~dst:dst.u ~row;
+      subsample_hv2 ~src:src.v ~dst:dst.v ~row
+    done
   ;;
 
-  let of_unpacked_420 (src : Yuv.t) =
-    let width = Plane.width src.y in
+  let to_420 (src : Yuv.t) =
+    let dst = Yuv.create_420 ~width:(Plane.width src.y) ~height:(Plane.height src.y) in
+    convert_to_420 ~src ~dst;
+    dst
+  ;;
+
+  let convert_from_420 ~(src : Yuv.t) ~(dst : Yuv.t) =
+    assert_is_420 src;
     let height = Plane.height src.y in
-    let o = Yuv.create_444 ~width ~height in
-    Plane.blit ~src:src.y ~dst:o.y;
+    Plane.blit ~src:src.y ~dst:dst.y;
     for row = 0 to (height / 2) - 1 do
-      supersample_hv2 ~src:src.u ~dst:o.u ~row;
-      supersample_hv2 ~src:src.v ~dst:o.v ~row
-    done;
-    o
+      supersample_hv2 ~src:src.u ~dst:dst.u ~row;
+      supersample_hv2 ~src:src.v ~dst:dst.v ~row
+    done
+  ;;
+
+  let of_420 (src : Yuv.t) =
+    assert_is_420 src;
+    let dst = Yuv.create_444 ~width:(Plane.width src.y) ~height:(Plane.height src.y) in
+    convert_from_420 ~src ~dst;
+    dst
   ;;
 
   let%expect_test "444<->422" =
@@ -180,7 +223,7 @@ module Planar_444 = struct
     101 111 121 131
     102 112 122 132
     103 113 123 133 |}];
-    let f422 = to_unpacked_422 f in
+    let f422 = to_422 f in
     Yuv.dump_yuv f422;
     [%expect
       {|
@@ -196,7 +239,7 @@ module Planar_444 = struct
     106 126
     107 127
     108 128 |}];
-    let f444 = of_unpacked_422 f422 in
+    let f444 = of_422 f422 in
     Yuv.dump_yuv f444;
     [%expect
       {|
@@ -238,7 +281,7 @@ module Planar_444 = struct
     101 111 121 131
     102 112 122 132
     103 113 123 133 |}];
-    let f420 = to_unpacked_420 f in
+    let f420 = to_420 f in
     Yuv.dump_yuv f420;
     [%expect
       {|
@@ -250,22 +293,21 @@ module Planar_444 = struct
      58  78
     106 126
     108 128 |}];
-    let f444 = of_unpacked_420 f420 in
+    let f444 = of_420 f420 in
     Yuv.dump_yuv f444;
-    [%expect
-      {|
-      0  10  20  30
-      1  11  21  31
-      2  12  22  32
-      3  13  23  33
-     56  66  76  76
-     57  67  77  77
-     58  68  78  78
-     58  68  78  78
-    106 116 126 126
-    107 117 127 127
-    108 118 128 128
-    108 118 128 128 |}]
+    [%expect{|
+        0  10  20  30
+        1  11  21  31
+        2  12  22  32
+        3  13  23  33
+       56  66  76  76
+       57  67  77  77
+       58  68  78  78
+       58  68  78  78
+      106 116 126 126
+      107 117 127 127
+      108 118 128 128
+      108 118 128 128 |}]
   ;;
 end
 
@@ -276,38 +318,50 @@ module Packed_422 = struct
   let uyvy = [| 1; 0; 2 |]
   let yvyu = [| 0; 3; 1 |]
 
-  let to_planar (p : Plane.t) fmt =
+  let convert_to_planar fmt ~(src : Plane.t) ~(dst : Yuv.t) =
     (* width and height of luma plane *)
-    let w = Plane.width p / 2 in
-    let h = Plane.height p in
-    let yuv = Yuv.create_422 ~width:w ~height:h in
+    let w = Plane.width src / 2 in
+    let h = Plane.height src in
     let yo, uo, vo = fmt.(0), fmt.(1), fmt.(2) in
     for row = 0 to h - 1 do
       for col = 0 to (w / 2) - 1 do
-        Plane.(yuv.y.![col * 2, row] <- p.![(col * 4) + yo, row]);
-        Plane.(yuv.y.![(col * 2) + 1, row] <- p.![(col * 4) + yo + 2, row]);
-        Plane.(yuv.u.![col, row] <- p.![(col * 4) + uo, row]);
-        Plane.(yuv.v.![col, row] <- p.![(col * 4) + vo, row])
+        Plane.(dst.y.![col * 2, row] <- src.![(col * 4) + yo, row]);
+        Plane.(dst.y.![(col * 2) + 1, row] <- src.![(col * 4) + yo + 2, row]);
+        Plane.(dst.u.![col, row] <- src.![(col * 4) + uo, row]);
+        Plane.(dst.v.![col, row] <- src.![(col * 4) + vo, row])
       done
-    done;
-    yuv
+    done
   ;;
 
-  let of_planar (yuv : Yuv.t) fmt =
+  let to_planar fmt (src : Plane.t) =
+    let w = Plane.width src / 2 in
+    let h = Plane.height src in
+    let dst = Yuv.create_422 ~width:w ~height:h in
+    convert_to_planar fmt ~src ~dst;
+    dst
+  ;;
+
+  let convert_from_planar fmt ~(src : Yuv.t) ~dst =
     (* width and height of luma plane *)
-    let w = Plane.width yuv.y in
-    let h = Plane.height yuv.y in
-    let p = Plane.create ~width:(w * 2) ~height:h in
+    let w = Plane.width src.y in
+    let h = Plane.height src.y in
     let yo, uo, vo = fmt.(0), fmt.(1), fmt.(2) in
     for row = 0 to h - 1 do
       for col = 0 to (w / 2) - 1 do
-        Plane.(p.![(col * 4) + yo, row] <- yuv.y.![col * 2, row]);
-        Plane.(p.![(col * 4) + yo + 2, row] <- yuv.y.![(col * 2) + 1, row]);
-        Plane.(p.![(col * 4) + uo, row] <- yuv.u.![col, row]);
-        Plane.(p.![(col * 4) + vo, row] <- yuv.v.![col, row])
+        Plane.(dst.![(col * 4) + yo, row] <- src.y.![col * 2, row]);
+        Plane.(dst.![(col * 4) + yo + 2, row] <- src.y.![(col * 2) + 1, row]);
+        Plane.(dst.![(col * 4) + uo, row] <- src.u.![col, row]);
+        Plane.(dst.![(col * 4) + vo, row] <- src.v.![col, row])
       done
-    done;
-    p
+    done
+  ;;
+
+  let of_planar fmt (src : Yuv.t) =
+    let w = Plane.width src.y in
+    let h = Plane.height src.y in
+    let dst = Plane.create ~width:(w * 2) ~height:h in
+    convert_from_planar fmt ~src ~dst;
+    dst
   ;;
 
   let%expect_test "planar <-> packed" =
@@ -323,8 +377,8 @@ module Packed_422 = struct
         Plane.(f.v.![col, row] <- Char.of_int_exn (100 + row + (col * 10)))
       done
     done;
-    let packed = of_planar f yuy2 in
-    let planar = to_planar packed yuy2 in
+    let packed = of_planar yuy2 f in
+    let planar = to_planar yuy2 packed in
     Yuv.dump_yuv f;
     Yuv.dump packed;
     Yuv.dump_yuv planar;
