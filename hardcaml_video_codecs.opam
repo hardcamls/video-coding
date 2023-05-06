@@ -12,6 +12,7 @@ depends: [
   "hardcaml_waveterm" {with-test}
   "core"
   "mdx"
+  "tsdl"
   "odoc" {with-doc}
 ]
 build: [
