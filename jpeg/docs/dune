@@ -1,1 +1,1 @@
-(mdx (packages hardcaml_video_codecs))
+(mdx (libraries core hardcaml_jpeg))

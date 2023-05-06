@@ -26,6 +26,5 @@ this set here.
 
 ```ocaml
 # module Jpeg = Hardcaml_jpeg;;
-Line 1, characters 15-28:
-Error: Unbound module Hardcaml_jpeg
+module Jpeg = Hardcaml_jpeg
 ```
