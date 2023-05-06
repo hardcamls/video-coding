@@ -45,3 +45,20 @@
 Interesting looking JPEG test suite:
 
 https://github.com/drewnoakes/metadata-extractor-images/tree/master/jpg
+
+## Using ffmpeg
+
+Decode with ffmpeg
+
+```
+ffmpeg -i Mouse480.jpg -pix_fmt yuv420p out.yuv
+```
+
+- `-y` to overwrite output 
+
+Encode with ffmpeg
+
+```
+ffmpeg -s 640x480 -pix_fmt yuv420p -i test-yuv420p.yuv test-640x480.jpg
+ffmpeg -s 640x480 -pix_fmt uyvy422 -i test-yuv422uyvy.yuv test-640x480.jpg
+```
