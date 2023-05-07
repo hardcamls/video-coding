@@ -1,4 +1,4 @@
-  $ source test-env.sh
+  $ . test-env.sh
 
 Decode Mouse480.jpg with the model and ffmpeg and show the max pixel difference is <= 1.
 I dont have much insight into what ffmpeg does, but it doesn't seem to be doing any post
