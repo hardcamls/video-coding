@@ -1,4 +1,4 @@
-  $ . test-env.sh
+  $ . ./test-env.sh
 
 Run the model encoder and decoder and check results against ffmpeg.
 

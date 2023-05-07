@@ -167,8 +167,10 @@ let decode_coefficient_block
 module Component = struct
   type t =
     { plane : (Plane.t[@sexp.opaque])
-    ; width : int
-    ; height : int
+    ; decoded_width : int
+    ; decoded_height : int
+    ; actual_width : int
+    ; actual_height : int
     ; mutable x : int
     ; mutable y : int
     ; mutable dc_pred : int
@@ -202,7 +204,8 @@ module Component = struct
 end
 
 type t =
-  { components : Component.t array
+  { header : Header.t
+  ; components : Component.t array
   ; entropy_coded_bits : Bits.t
   }
 [@@deriving fields]
@@ -277,46 +280,68 @@ let extract_entropy_coded_bits bits =
   Bits.create entropy_data
 ;;
 
-let init (header : Header.t) bits =
+let frame_and_scan (header : Header.t) =
   match header with
   | { frame = Some frame
     ; scan = Some scan
-    ; quant_tables
+    ; quant_tables = _
     ; restart_interval = _
     ; huffman_tables = _
-    } ->
-    let max_hscale =
-      Array.fold frame.components ~init:0 ~f:(fun m c ->
-          max m c.horizontal_sampling_factor)
-    in
-    let max_vscale =
-      Array.fold frame.components ~init:0 ~f:(fun m c -> max m c.vertical_sampling_factor)
-    in
-    let components =
-      Array.map scan.scan_components ~f:(fun scan ->
-          let component = find_component scan frame in
-          let width = frame.width * component.horizontal_sampling_factor / max_hscale in
-          let height = frame.height * component.vertical_sampling_factor / max_vscale in
-          { Component.plane = Plane.create ~width ~height
-          ; width
-          ; height
-          ; dc_pred = 0
-          ; x = 0
-          ; y = 0
-          ; component
-          ; scan
-          ; quant_table =
-              find_quant_table quant_tables component.quantization_table_identifier
-          ; dc_tab = find_dc_huffman_table header.huffman_tables scan.dc_coef_selector
-          ; ac_tab = find_ac_huffman_table header.huffman_tables scan.ac_coef_selector
-          ; coefs = Array.init 64 ~f:(Fn.const 0)
-          ; dequant = Array.init 64 ~f:(Fn.const 0)
-          ; idct = Array.init 64 ~f:(Fn.const 0)
-          ; recon = Array.init 64 ~f:(Fn.const 0)
-          })
-    in
-    { components; entropy_coded_bits = extract_entropy_coded_bits bits }
-  | _ -> raise_s [%message "not start of frame or sequence" (header : Header.t)]
+    } -> frame, scan
+  | _ -> raise_s [%message "From start of frame or start of scan marker"]
+;;
+
+let max_component_scale (frame : Markers.Sof.t) =
+  let max_hscale =
+    Array.fold frame.components ~init:0 ~f:(fun m c -> max m c.horizontal_sampling_factor)
+  in
+  let max_vscale =
+    Array.fold frame.components ~init:0 ~f:(fun m c -> max m c.vertical_sampling_factor)
+  in
+  max_hscale, max_vscale
+;;
+
+let init (header : Header.t) bits =
+  let frame, scan = frame_and_scan header in
+  let max_hscale, max_vscale = max_component_scale frame in
+  let rounded_width = Int.round_up ~to_multiple_of:(max_hscale * 8) frame.width in
+  let rounded_height = Int.round_up ~to_multiple_of:(max_vscale * 8) frame.height in
+  let components =
+    Array.map scan.scan_components ~f:(fun scan ->
+        let component = find_component scan frame in
+        let decoded_width =
+          rounded_width * component.horizontal_sampling_factor / max_hscale
+        in
+        let decoded_height =
+          rounded_height * component.vertical_sampling_factor / max_vscale
+        in
+        let actual_width =
+          rounded_width * component.horizontal_sampling_factor / max_hscale
+        in
+        let actual_height =
+          rounded_height * component.vertical_sampling_factor / max_vscale
+        in
+        { Component.plane = Plane.create ~width:decoded_width ~height:decoded_height
+        ; decoded_width
+        ; decoded_height
+        ; actual_width
+        ; actual_height
+        ; dc_pred = 0
+        ; x = 0
+        ; y = 0
+        ; component
+        ; scan
+        ; quant_table =
+            find_quant_table header.quant_tables component.quantization_table_identifier
+        ; dc_tab = find_dc_huffman_table header.huffman_tables scan.dc_coef_selector
+        ; ac_tab = find_ac_huffman_table header.huffman_tables scan.ac_coef_selector
+        ; coefs = Array.init 64 ~f:(Fn.const 0)
+        ; dequant = Array.init 64 ~f:(Fn.const 0)
+        ; idct = Array.init 64 ~f:(Fn.const 0)
+        ; recon = Array.init 64 ~f:(Fn.const 0)
+        })
+  in
+  { header; components; entropy_coded_bits = extract_entropy_coded_bits bits }
 ;;
 
 let decode_block ~bits ~(component : Component.t) =
@@ -346,15 +371,18 @@ let decode_component_seq ~bits ~(component : Component.t) ~blk_x ~blk_y =
   |> Sequence.concat
 ;;
 
-let decode_seq { components; entropy_coded_bits } =
-  let blocks_wide =
-    components.(0).width / (8 * components.(0).component.horizontal_sampling_factor)
+let decode_seq { header = _; components; entropy_coded_bits } =
+  (* each component will be the same number of 'macro' blocks in size, so it doesn't matter
+     which we use. *)
+  let macroblocks_wide =
+    components.(0).decoded_width
+    / (8 * components.(0).component.horizontal_sampling_factor)
   in
-  let blocks_high =
-    components.(0).height / (8 * components.(0).component.vertical_sampling_factor)
+  let macroblocks_high =
+    components.(0).decoded_height / (8 * components.(0).component.vertical_sampling_factor)
   in
-  Sequence.init blocks_high ~f:(fun blk_y ->
-      Sequence.init blocks_wide ~f:(fun blk_x ->
+  Sequence.init macroblocks_high ~f:(fun blk_y ->
+      Sequence.init macroblocks_wide ~f:(fun blk_x ->
           Sequence.init (Array.length components) ~f:(fun id ->
               decode_component_seq
                 ~bits:entropy_coded_bits
@@ -368,18 +396,36 @@ let decode_seq { components; entropy_coded_bits } =
 
 let decode decoder = decode_seq decoder |> Sequence.iter ~f:(fun _ -> ())
 
-let get_frame decoder =
-  Frame.of_planes
-    ~y:decoder.components.(0).plane
-    ~u:decoder.components.(1).plane
-    ~v:decoder.components.(2).plane
+let get_decoded_planes decoder =
+  Array.map decoder.components ~f:(fun component -> component.plane)
+;;
+
+let crop (component : Component.t) =
+  if component.decoded_width <> component.actual_width
+     || component.decoded_height <> component.actual_height
+  then (
+    let plane =
+      Plane.create ~width:component.actual_width ~height:component.actual_height
+    in
+    for row = 0 to component.actual_height - 1 do
+      for col = 0 to component.actual_width - 1 do
+        Plane.(plane.![col, row] <- component.plane.![col, row])
+      done
+    done;
+    plane)
+  else component.plane
+;;
+
+let get_yuv_frame decoder =
+  let planes = Array.map decoder.components ~f:(fun component -> crop component) in
+  Frame.of_planes ~y:planes.(0) ~u:planes.(1) ~v:planes.(2)
 ;;
 
 let decode_a_frame bits =
   let header = Header.decode bits in
   let decoder = init header bits in
   decode decoder;
-  get_frame decoder
+  get_yuv_frame decoder
 ;;
 
 module For_testing = struct

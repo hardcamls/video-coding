@@ -37,14 +37,20 @@ end
 (** Decoder. *)
 type t
 
-(** Create the decoder from a decoded header and bitstream placed just after the Start of Scan data. *)
+(** Create the decoder from a decoded header and bitstream placed just after the 
+    Start of Scan data. *)
 val init : Header.t -> Bits.t -> t
 
 (** Decode a single frame *)
 val decode : t -> unit
 
-(** Get decoded frame data *)
-val get_frame : t -> Frame.t
+(** Get the raw frame data with dimensions rounded up to account for 8x8 blocks 
+    and relative scale factors between components. *)
+val get_decoded_planes : t -> Plane.t array
+
+(** Get the decoded frame data interpreted as a YUV frame.  Fails if there are 
+    not 3 components.  Crops the planes to the actual image size if necessary. *)
+val get_yuv_frame : t -> Frame.t
 
 (** Return the bitstream used by the decoder. *)
 val entropy_coded_bits : t -> Bits.t
