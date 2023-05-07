@@ -22,5 +22,5 @@ let () =
   Command_unix.run
     (Command.group
        ~summary:"YUV file processing tools"
-       [ "play", command_oplay; "convert", command_convert ])
+       [ "play", command_oplay; "convert", command_convert; "compare", Ocompare.commands ])
 ;;

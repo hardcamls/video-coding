@@ -27,6 +27,8 @@ jobs:
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
+      - run apt install ffmpeg
+
       - run: opam pin add -n hardcaml git+https://github.com/hardcamls/hardcaml.git#fix-concat
 
       - run: opam pin add -n hardcaml_waveterm git+https://github.com/janestreet/hardcaml_waveterm.git#master

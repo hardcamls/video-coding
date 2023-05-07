@@ -1,0 +1,6 @@
+(cram
+ (deps
+  ../bin/model.exe
+  ../bin/simulate.exe
+  ../../tools/bin/oyuv.exe
+  ../test_data/Mouse480.jpg))
