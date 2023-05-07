@@ -6,3 +6,24 @@
   ../../tools/bin/oyuv.exe
   ../test_data/Mouse480.jpg
   ../test_data/mini64x64.420))
+
+; The following rules run slow hardware simulations under a simulation
+; profile (ie dune runtest --profile=simulation).  These are longer
+; running tests we dont want to always do during development, but would
+; like to run in CI.
+
+(rule
+ (enabled_if
+  (= %{profile} simulation))
+ (deps ../test_data/mini.jpg)
+ (action
+  (with-stdout-to
+   decoder.output
+   (run ../bin/simulate.exe decoder ../test_data/mini.jpg))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff decoder.expected decoder.output))
+ (enabled_if
+  (= %{profile} simulation)))
