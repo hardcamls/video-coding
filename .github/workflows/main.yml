@@ -27,7 +27,7 @@ jobs:
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
-      - run: apt install ffmpeg
+      - run: sudo apt-get install -qq -yy ffmpeg
 
       - run: opam pin add -n hardcaml git+https://github.com/hardcamls/hardcaml.git#fix-concat
 
