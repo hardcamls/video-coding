@@ -364,8 +364,8 @@ let decode_component_seq ~bits ~(component : Component.t) ~blk_x ~blk_y =
   let hscale = component.component.horizontal_sampling_factor in
   Sequence.init vscale ~f:(fun y ->
       Sequence.init hscale ~f:(fun x ->
-          component.x <- ((blk_x * vscale) + x) * 8;
-          component.y <- ((blk_y * hscale) + y) * 8;
+          component.x <- ((blk_x * hscale) + x) * 8;
+          component.y <- ((blk_y * vscale) + y) * 8;
           decode_block ~bits ~(component : Component.t);
           component))
   |> Sequence.concat

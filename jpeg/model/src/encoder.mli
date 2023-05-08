@@ -70,42 +70,66 @@ val write_bits
   -> ac_table:Tables.ac_coef array array
   -> unit
 
-(** Write JPEG headers. *)
-val write_headers
-  :  Bitstream_writer.t
-  -> width:int
-  -> height:int
-  -> dc_luma:Tables.Specification.t
-  -> ac_luma:Tables.Specification.t
-  -> dc_chroma:Tables.Specification.t
-  -> ac_chroma:Tables.Specification.t
-  -> qnt_luma:int array
-  -> qnt_chroma:int array
+module Identified : sig
+  type identifier = int
+
+  type 'a t =
+    { identifier : identifier
+    ; data : 'a
+    }
+end
+
+module Parameters : sig
+  type scan_component =
+    { quant_table : Identified.identifier
+    ; dc_huffman_table : Identified.identifier
+    ; ac_huffman_table : Identified.identifier
+    ; component : Identified.identifier
+    ; horizontal_sampling_factor : int
+    ; vertical_sampling_factor : int
+    }
+
+  type t =
+    { width : int
+    ; height : int
+    ; quant_tables : int array Identified.t array
+    ; dc_huffman_tables : Tables.Specification.t Identified.t array
+    ; ac_huffman_tables : Tables.Specification.t Identified.t array
+    ; scan_components : scan_component array
+    }
+
+  val c420 : width:int -> height:int -> quality:int -> t
+  val c422 : width:int -> height:int -> quality:int -> t
+  val c444 : width:int -> height:int -> quality:int -> t
+  val monochrome : width:int -> height:int -> quality:int -> t
+end
+
+(** Core JPEG encoder.
+
+    1. create
+    2. write_headers
+    3. blit in image data
+    4. Iter encode_seq 
+    5. complete
+*)
+
+type t
+
+val create
+  :  ?compute_reconstruction_error:bool
+  -> params:Parameters.t
+  -> writer:Bitstream_writer.t
   -> unit
+  -> t
+
+val write_headers : params:Parameters.t -> writer:Bitstream_writer.t -> unit
+val get_plane : t -> int -> Plane.t
+val encode_seq : t -> Block.t Sequence.t
+val complete_and_write_eoi : t -> unit
 
 (** {2 Frame encoding} *)
 
-(** Encode a 4:2:0 input [frame]. 
-
-    [quality] ranges from 1(low) to 100(high).  Around 75 should provide decent images.
-
-    The coded frame is written to [writer].
-*)
 val encode_420 : frame:Frame.t -> quality:int -> writer:Bitstream_writer.t -> unit
-
-module For_testing : sig
-  module Sequenced : sig
-    type t
-
-    val create_and_write_header
-      :  ?compute_reconstruction_error:bool
-      -> frame:Frame.t
-      -> quality:int
-      -> writer:Bitstream_writer.t
-      -> unit
-      -> t
-
-    val encode_420_seq : t -> Block.t Sequence.t
-    val complete_and_write_eoi : t -> unit
-  end
-end
+val encode_422 : frame:Frame.t -> quality:int -> writer:Bitstream_writer.t -> unit
+val encode_444 : frame:Frame.t -> quality:int -> writer:Bitstream_writer.t -> unit
+val encode_monochrome : frame:Plane.t -> quality:int -> writer:Bitstream_writer.t -> unit

@@ -12,6 +12,7 @@ val create : width:int -> height:int -> t
 val copy : t -> t
 
 val blit : src:t -> dst:t -> unit
+val blit_available : src:t -> dst:t -> unit
 
 (** Plane width *)
 val width : t -> int

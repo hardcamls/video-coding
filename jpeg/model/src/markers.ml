@@ -14,12 +14,12 @@ module Component = struct
 
   let decode bits =
     let identifier = Reader.get bits 8 in
-    let vertical_sampling_factor = Reader.get bits 4 in
     let horizontal_sampling_factor = Reader.get bits 4 in
+    let vertical_sampling_factor = Reader.get bits 4 in
     let quantization_table_identifier = Reader.get bits 8 in
     { identifier
-    ; vertical_sampling_factor
     ; horizontal_sampling_factor
+    ; vertical_sampling_factor
     ; quantization_table_identifier
     }
   ;;

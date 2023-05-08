@@ -218,7 +218,7 @@ module Transform = struct
     | C422 -> off_pixel_422_packed t 0 1 3
   ;;
 
-  let copy422_to_yuy2 =
+  let copy422_to_yuy2 () =
     let b = ref None in
     fun t f ->
       let b = get_buffer f b in
@@ -247,7 +247,7 @@ module Transform = struct
       b
   ;;
 
-  let draw_plane =
+  let draw_plane () =
     let b = ref None in
     fun t f ->
       let b = get_buffer f b in
@@ -326,17 +326,19 @@ module Transform = struct
   let run t f1 f2 =
     (* convert 422 to yuy2 *)
     let f1, f2 =
+      let copy1, copy2 = copy422_to_yuy2 (), copy422_to_yuy2 () in
       match Yuv_format.equal t.format C422, f2 with
-      | true, Some f2 -> copy422_to_yuy2 t f1, Some (copy422_to_yuy2 t f2)
-      | true, None -> copy422_to_yuy2 t f1, None
+      | true, Some f2 -> copy1 t f1, Some (copy2 t f2)
+      | true, None -> copy1 t f1, None
       | _ -> f1, f2
     in
     (* select plane *)
     let f1, f2 =
+      let draw1, draw2 = draw_plane (), draw_plane () in
       match t.show_plane, f2 with
       | All, _ -> f1, f2
-      | _, Some f2 -> draw_plane t f1, Some (draw_plane t f2)
-      | _, None -> draw_plane t f1, None
+      | _, Some f2 -> draw1 t f1, Some (draw2 t f2)
+      | _, None -> draw1 t f1, None
     in
     (* difference *)
     let f =
