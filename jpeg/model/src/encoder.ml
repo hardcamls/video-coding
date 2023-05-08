@@ -239,7 +239,7 @@ let write_app0 writer data =
   done
 ;;
 
-let write_sof writer ~width ~height =
+let write_sof writer ~width ~height components =
   write_marker_code writer Marker_code.sof0;
   Markers.Sof.encode
     writer
@@ -247,47 +247,18 @@ let write_sof writer ~width ~height =
     ; sample_precision = 8
     ; width
     ; height
-    ; number_of_components = 3
-    ; components =
-        [| { identifier = 1
-           ; horizontal_sampling_factor = 2
-           ; vertical_sampling_factor = 2
-           ; quantization_table_identifier = 0
-           }
-         ; { identifier = 2
-           ; horizontal_sampling_factor = 1
-           ; vertical_sampling_factor = 1
-           ; quantization_table_identifier = 1
-           }
-         ; { identifier = 3
-           ; horizontal_sampling_factor = 1
-           ; vertical_sampling_factor = 1
-           ; quantization_table_identifier = 1
-           }
-        |]
+    ; number_of_components = Array.length components
+    ; components
     }
 ;;
 
-let write_sos writer =
+let write_sos writer scan_components =
   write_marker_code writer Marker_code.sos;
   Markers.Sos.encode
     writer
     { Markers.Sos.length = 0
-    ; number_of_image_components = 3
-    ; scan_components =
-        [| { Markers.Scan_component.selector = 1
-           ; dc_coef_selector = 0
-           ; ac_coef_selector = 0
-           }
-         ; { Markers.Scan_component.selector = 2
-           ; dc_coef_selector = 1
-           ; ac_coef_selector = 1
-           }
-         ; { Markers.Scan_component.selector = 3
-           ; dc_coef_selector = 1
-           ; ac_coef_selector = 1
-           }
-        |]
+    ; number_of_image_components = Array.length scan_components
+    ; scan_components
     ; start_of_predictor_selection = 0
     ; end_of_predictor_selection = 63
     ; successive_approximation_bit_high = 0
@@ -295,159 +266,292 @@ let write_sos writer =
     }
 ;;
 
+module Identified = struct
+  type identifier = int
+
+  type 'a t =
+    { identifier : identifier
+    ; data : 'a
+    }
+
+  let find which_table id identified =
+    match Array.find identified ~f:(fun { identifier; data = _ } -> id = identifier) with
+    | None ->
+      let ids = Array.map identified ~f:(fun { identifier; _ } -> identifier) in
+      raise_s
+        [%message
+          "Failed to find identifier" (which_table : string) (id : int) (ids : int array)]
+    | Some x -> x.data
+  ;;
+
+  let map ~f = Array.map ~f:(fun { identifier; data } -> { identifier; data = f data })
+end
+
+module Parameters = struct
+  type scan_component =
+    { quant_table : Identified.identifier
+    ; dc_huffman_table : Identified.identifier
+    ; ac_huffman_table : Identified.identifier
+    ; component : Identified.identifier
+    ; horizontal_sampling_factor : int
+    ; vertical_sampling_factor : int
+    }
+
+  type t =
+    { width : int
+    ; height : int
+    ; quant_tables : int array Identified.t array
+    ; dc_huffman_tables : Tables.Specification.t Identified.t array
+    ; ac_huffman_tables : Tables.Specification.t Identified.t array
+    ; scan_components : scan_component array
+    }
+
+  let yuv ~width ~height ~quality scales =
+    let qnt_luma = Quant_tables.scale Quant_tables.luma quality in
+    let qnt_chroma = Quant_tables.scale Quant_tables.chroma quality in
+    { width
+    ; height
+    ; quant_tables =
+        [| { identifier = 0; data = qnt_luma }; { identifier = 1; data = qnt_chroma } |]
+    ; dc_huffman_tables =
+        [| { identifier = 0; data = Tables.Default.dc_luma }
+         ; { identifier = 1; data = Tables.Default.dc_chroma }
+        |]
+    ; ac_huffman_tables =
+        [| { identifier = 0; data = Tables.Default.ac_luma }
+         ; { identifier = 1; data = Tables.Default.ac_chroma }
+        |]
+    ; scan_components =
+        [| { quant_table = 0
+           ; dc_huffman_table = 0
+           ; ac_huffman_table = 0
+           ; component = 1
+           ; horizontal_sampling_factor = scales.(0)
+           ; vertical_sampling_factor = scales.(1)
+           }
+         ; { quant_table = 1
+           ; dc_huffman_table = 1
+           ; ac_huffman_table = 1
+           ; component = 2
+           ; horizontal_sampling_factor = scales.(2)
+           ; vertical_sampling_factor = scales.(3)
+           }
+         ; { quant_table = 1
+           ; dc_huffman_table = 1
+           ; ac_huffman_table = 1
+           ; component = 3
+           ; horizontal_sampling_factor = scales.(4)
+           ; vertical_sampling_factor = scales.(5)
+           }
+        |]
+    }
+  ;;
+
+  let c420 = yuv [| 2; 2; 1; 1; 1; 1 |]
+  let c422 = yuv [| 2; 2; 1; 2; 1; 2 |]
+  let c444 = yuv [| 1; 1; 1; 1; 1; 1 |]
+
+  let monochrome ~width ~height ~quality =
+    let qnt_luma = Quant_tables.scale Quant_tables.luma quality in
+    { width
+    ; height
+    ; quant_tables = [| { identifier = 0; data = qnt_luma } |]
+    ; dc_huffman_tables = [| { identifier = 0; data = Tables.Default.dc_luma } |]
+    ; ac_huffman_tables = [| { identifier = 0; data = Tables.Default.ac_luma } |]
+    ; scan_components =
+        [| { quant_table = 0
+           ; dc_huffman_table = 0
+           ; ac_huffman_table = 0
+           ; component = 1
+           ; horizontal_sampling_factor = 1
+           ; vertical_sampling_factor = 1
+           }
+        |]
+    }
+  ;;
+end
+
 let write_headers
-    writer
-    ~width
-    ~height
-    ~dc_luma
-    ~ac_luma
-    ~dc_chroma
-    ~ac_chroma
-    ~qnt_luma
-    ~qnt_chroma
+    ~params:
+      { Parameters.width
+      ; height
+      ; quant_tables
+      ; dc_huffman_tables
+      ; ac_huffman_tables
+      ; scan_components
+      }
+    ~writer
   =
   write_marker_code writer Marker_code.soi;
   write_app0 writer "Hardcaml JPEG.";
-  write_dqt writer ~table_identifier:0 qnt_luma;
-  write_dqt writer ~table_identifier:1 qnt_chroma;
-  write_sof writer ~width ~height;
-  write_dht writer ~table_class:0 ~destination_identifier:0 dc_luma;
-  write_dht writer ~table_class:0 ~destination_identifier:1 dc_chroma;
-  write_dht writer ~table_class:1 ~destination_identifier:0 ac_luma;
-  write_dht writer ~table_class:1 ~destination_identifier:1 ac_chroma;
-  write_sos writer
+  Array.iter quant_tables ~f:(fun { identifier; data } ->
+      write_dqt writer ~table_identifier:identifier data);
+  write_sof
+    writer
+    ~width
+    ~height
+    (Array.map
+       scan_components
+       ~f:(fun
+            { quant_table
+            ; component
+            ; horizontal_sampling_factor
+            ; vertical_sampling_factor
+            ; _
+            }
+          ->
+         { Markers.Component.identifier = component
+         ; horizontal_sampling_factor
+         ; vertical_sampling_factor
+         ; quantization_table_identifier = quant_table
+         }));
+  Array.iter dc_huffman_tables ~f:(fun { identifier; data } ->
+      write_dht writer ~table_class:0 ~destination_identifier:identifier data);
+  Array.iter ac_huffman_tables ~f:(fun { identifier; data } ->
+      write_dht writer ~table_class:1 ~destination_identifier:identifier data);
+  write_sos
+    writer
+    (Array.map
+       scan_components
+       ~f:(fun { component; dc_huffman_table; ac_huffman_table; _ } ->
+         { Markers.Scan_component.selector = component
+         ; dc_coef_selector = dc_huffman_table
+         ; ac_coef_selector = ac_huffman_table
+         }))
 ;;
 
-module Sequenced = struct
-  type t =
-    { frame : Frame.t
-    ; writer : Writer.t
-    ; blocks : Block.t array
-    ; qnt_luma : int array
-    ; qnt_chroma : int array
-    ; dc_luma : Tables.dc_coef array
-    ; ac_luma : Tables.ac_coef array array
-    ; dc_chroma : Tables.dc_coef array
-    ; ac_chroma : Tables.ac_coef array array
-    }
+type scan =
+  { hscale : int
+  ; vscale : int
+  ; plane : Plane.t
+  ; block : Block.t
+  ; quant_table : int array
+  ; dc_huffman_table : Tables.dc_coef array
+  ; ac_huffman_table : Tables.ac_coef array array
+  }
 
-  let create_and_write_header
-      ?(compute_reconstruction_error = false)
-      ~frame
-      ~quality
-      ~writer
-      ()
-    =
-    let width = Frame.width frame in
-    let height = Frame.height frame in
-    assert (width % 16 = 0);
-    assert (height % 16 = 0);
-    let blocks = Array.init 3 ~f:(fun _ -> Block.create compute_reconstruction_error) in
-    let qnt_luma = Quant_tables.scale Quant_tables.luma quality in
-    let qnt_chroma = Quant_tables.scale Quant_tables.chroma quality in
-    write_headers
-      writer
-      ~width
-      ~height
-      ~dc_luma:Tables.Default.dc_luma
-      ~ac_luma:Tables.Default.ac_luma
-      ~dc_chroma:Tables.Default.dc_chroma
-      ~ac_chroma:Tables.Default.ac_chroma
-      ~qnt_luma
-      ~qnt_chroma;
-    let dc_luma = Tables.Encoder.dc_table Tables.Default.dc_luma in
-    let ac_luma = Tables.Encoder.ac_table Tables.Default.ac_luma in
-    let dc_chroma = Tables.Encoder.dc_table Tables.Default.dc_chroma in
-    let ac_chroma = Tables.Encoder.ac_table Tables.Default.ac_chroma in
-    { frame
-    ; writer
-    ; blocks
-    ; qnt_luma
-    ; qnt_chroma
-    ; dc_luma
-    ; ac_luma
-    ; dc_chroma
-    ; ac_chroma
-    }
-  ;;
+type t =
+  { params : Parameters.t
+  ; scans : scan list
+  ; writer : Writer.t
+  }
+[@@defiving fields]
 
-  let encode_420_seq
-      { frame
-      ; writer
-      ; blocks
-      ; qnt_luma
-      ; qnt_chroma
-      ; dc_luma
-      ; ac_luma
-      ; dc_chroma
-      ; ac_chroma
-      }
-    =
-    let width = Frame.width frame in
-    let height = Frame.height frame in
-    Sequence.init (height / 16) ~f:(fun y_mb ->
-        Sequence.init (width / 16) ~f:(fun x_mb ->
-            let y =
-              Sequence.init 2 ~f:(fun y_subblk ->
-                  Sequence.init 2 ~f:(fun x_subblk ->
-                      let x_blk = (x_mb * 2) + x_subblk in
-                      let y_blk = (y_mb * 2) + y_subblk in
-                      blocks.(0).x_pos <- x_blk * 8;
-                      blocks.(0).y_pos <- y_blk * 8;
-                      encode_block
-                        (Frame.y frame)
-                        blocks.(0)
-                        ~writer
-                        ~dc_table:dc_luma
-                        ~ac_table:ac_luma
-                        ~qnt_table:qnt_luma;
-                      blocks.(0)))
-              |> Sequence.concat
-            in
-            let u =
-              Sequence.init 1 ~f:(fun _ ->
-                  blocks.(1).x_pos <- x_mb * 8;
-                  blocks.(1).y_pos <- y_mb * 8;
-                  encode_block
-                    (Frame.u frame)
-                    blocks.(1)
-                    ~writer
-                    ~dc_table:dc_chroma
-                    ~ac_table:ac_chroma
-                    ~qnt_table:qnt_chroma;
-                  blocks.(1))
-            in
-            let v =
-              Sequence.init 1 ~f:(fun _ ->
-                  blocks.(2).x_pos <- x_mb * 8;
-                  blocks.(2).y_pos <- y_mb * 8;
-                  encode_block
-                    (Frame.v frame)
-                    blocks.(2)
-                    ~writer
-                    ~dc_table:dc_chroma
-                    ~ac_table:ac_chroma
-                    ~qnt_table:qnt_chroma;
-                  blocks.(2))
-            in
-            Sequence.Infix.(y @ u @ v))
-        |> Sequence.concat)
+let create ?(compute_reconstruction_error = false) ~(params : Parameters.t) ~writer () =
+  let dc_huffman_tables =
+    Identified.map params.dc_huffman_tables ~f:Tables.Encoder.dc_table
+  in
+  let ac_huffman_tables =
+    Identified.map params.ac_huffman_tables ~f:Tables.Encoder.ac_table
+  in
+  let max_hscale, max_vscale =
+    ( Array.fold params.scan_components ~init:0 ~f:(fun acc c ->
+          max acc c.horizontal_sampling_factor)
+    , Array.fold params.scan_components ~init:0 ~f:(fun acc c ->
+          max acc c.vertical_sampling_factor) )
+  in
+  let scans =
+    List.init (Array.length params.scan_components) ~f:(fun i ->
+        let scan = params.scan_components.(i) in
+        let width =
+          Int.round_up ~to_multiple_of:(8 * scan.horizontal_sampling_factor) params.width
+        in
+        let height =
+          Int.round_up ~to_multiple_of:(8 * scan.vertical_sampling_factor) params.height
+        in
+        let width = width * scan.horizontal_sampling_factor / max_hscale in
+        let height = height * scan.vertical_sampling_factor / max_vscale in
+        { hscale = scan.horizontal_sampling_factor
+        ; vscale = scan.vertical_sampling_factor
+        ; block = Block.create compute_reconstruction_error
+        ; plane = Plane.create ~width ~height
+        ; quant_table = Identified.find "quant" scan.quant_table params.quant_tables
+        ; dc_huffman_table =
+            Identified.find "dc_huffman" scan.dc_huffman_table dc_huffman_tables
+        ; ac_huffman_table =
+            Identified.find "ac_huffman" scan.ac_huffman_table ac_huffman_tables
+        })
+  in
+  { params; scans; writer }
+;;
+
+let get_plane t idx = (List.nth_exn t.scans idx).plane
+
+let encode_seq (t : t) =
+  let mbs_wide, mbs_high =
+    match t.scans with
+    | { hscale; vscale; plane; _ } :: _ ->
+      Plane.width plane / (8 * hscale), Plane.height plane / (8 * vscale)
+    | [] -> raise_s [%message "Image has no scans"]
+  in
+  let scans = Sequence.of_list t.scans in
+  let inner_blocks ~x_mb ~y_mb scan =
+    Sequence.init scan.vscale ~f:(fun y_subblk ->
+        Sequence.init scan.hscale ~f:(fun x_subblk ->
+            let x_blk = (x_mb * scan.hscale) + x_subblk in
+            let y_blk = (y_mb * scan.vscale) + y_subblk in
+            scan.block.x_pos <- x_blk * 8;
+            scan.block.y_pos <- y_blk * 8;
+            encode_block
+              scan.plane
+              scan.block
+              ~writer:t.writer
+              ~dc_table:scan.dc_huffman_table
+              ~ac_table:scan.ac_huffman_table
+              ~qnt_table:scan.quant_table;
+            scan.block))
     |> Sequence.concat
-  ;;
-
-  let complete_and_write_eoi { writer; _ } =
-    Writer.flush_with_1s writer ~stuffing:true;
-    write_marker_code writer Marker_code.eoi
-  ;;
-end
-
-(* Basic 420 encoder.  We'll generalize over components and scans shortly. *)
-let encode_420 ~frame ~quality ~writer =
-  let t = Sequenced.create_and_write_header ~frame ~quality ~writer () in
-  Sequence.iter (Sequenced.encode_420_seq t) ~f:(fun _ -> ());
-  Sequenced.complete_and_write_eoi t
+  in
+  Sequence.init mbs_high ~f:(fun y_mb ->
+      Sequence.init mbs_wide ~f:(fun x_mb ->
+          Sequence.map scans ~f:(inner_blocks ~x_mb ~y_mb) |> Sequence.concat)
+      |> Sequence.concat)
+  |> Sequence.concat
 ;;
 
-module For_testing = struct
-  module Sequenced = Sequenced
-end
+let complete_and_write_eoi { writer; _ } =
+  Writer.flush_with_1s writer ~stuffing:true;
+  write_marker_code writer Marker_code.eoi
+;;
+
+let encode_yuv ~frame ~writer ~params =
+  let t = create ~params ~writer () in
+  Plane.blit ~src:(Frame.y frame) ~dst:(List.nth_exn t.scans 0).plane;
+  Plane.blit ~src:(Frame.u frame) ~dst:(List.nth_exn t.scans 1).plane;
+  Plane.blit ~src:(Frame.v frame) ~dst:(List.nth_exn t.scans 2).plane;
+  write_headers ~params ~writer;
+  Sequence.iter (encode_seq t) ~f:(fun _ -> ());
+  complete_and_write_eoi t
+;;
+
+let encode_420 ~frame ~quality ~writer =
+  let params =
+    Parameters.c420 ~width:(Frame.width frame) ~height:(Frame.height frame) ~quality
+  in
+  encode_yuv ~frame ~writer ~params
+;;
+
+let encode_422 ~frame ~quality ~writer =
+  let params =
+    Parameters.c422 ~width:(Frame.width frame) ~height:(Frame.height frame) ~quality
+  in
+  encode_yuv ~frame ~writer ~params
+;;
+
+let encode_444 ~frame ~quality ~writer =
+  let params =
+    Parameters.c444 ~width:(Frame.width frame) ~height:(Frame.height frame) ~quality
+  in
+  encode_yuv ~frame ~writer ~params
+;;
+
+let encode_monochrome ~frame ~quality ~writer =
+  let params =
+    Parameters.monochrome ~width:(Plane.width frame) ~height:(Plane.height frame) ~quality
+  in
+  let t = create ~params ~writer () in
+  Plane.blit ~src:frame ~dst:(List.nth_exn t.scans 0).plane;
+  write_headers ~params ~writer;
+  Sequence.iter (encode_seq t) ~f:(fun _ -> ());
+  complete_and_write_eoi t
+;;

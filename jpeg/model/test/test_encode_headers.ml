@@ -17,18 +17,9 @@ end
 let%expect_test "example header" =
   let quality = 20 in
   let writer = Writer.create () in
-  let qnt_luma = Quant_tables.scale Quant_tables.luma quality in
-  let qnt_chroma = Quant_tables.scale Quant_tables.chroma quality in
   Encoder.write_headers
-    writer
-    ~width:480
-    ~height:320
-    ~dc_luma:Tables.Default.dc_luma
-    ~ac_luma:Tables.Default.ac_luma
-    ~dc_chroma:Tables.Default.dc_chroma
-    ~ac_chroma:Tables.Default.ac_chroma
-    ~qnt_luma
-    ~qnt_chroma;
+    ~params:(Encoder.Parameters.c420 ~width:480 ~height:320 ~quality)
+    ~writer;
   let buffer = Writer.get_buffer writer in
   print_s [%message (buffer : String.Hexdump.t)];
   let header = Decoder.Header.decode (Reader.From_string.create buffer) in
