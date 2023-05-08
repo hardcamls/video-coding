@@ -251,9 +251,6 @@ let reconstruct ~block_number frame pixels =
   let width = Frame.width frame in
   let y_pos = macroblock / (width / 16) in
   let x_pos = macroblock % (width / 16) in
-  print_s
-    [%message
-      (macroblock : int) (subblock : int) (block_number : int) (x_pos : int) (y_pos : int)];
   let copy plane x_pos y_pos =
     for y = 0 to 7 do
       for x = 0 to 7 do

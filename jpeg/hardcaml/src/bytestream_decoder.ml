@@ -60,6 +60,7 @@ let markers x = List.map x ~f:(fun (x, y) -> Signal.of_int ~width:8 x, y)
 let create scope (i : _ I.t) =
   let ( -- ) = Scope.naming scope in
   let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
+  ignore (sm.current -- "BSTATE" : Signal.t);
   let dht = Markers.Dht.O.Of_signal.wires () in
   let start_dht = Var.wire ~default:gnd in
   let dqt = Markers.Dqt.O.Of_signal.wires () in
@@ -79,6 +80,8 @@ let create scope (i : _ I.t) =
   ignore (skip_count.value -- "SKIP_COUNT" : Signal.t);
   ignore (sm.current -- "STATE" : Signal.t);
   let decoder_start = Var.wire ~default:gnd in
+  let flush_count = Clocking.Var.reg i.clocking ~width:4 in
+  let flush_count_next = flush_count.value +:. 1 in
   Always.(
     compile
       [ start_dht <-- gnd
@@ -171,9 +174,10 @@ let create scope (i : _ I.t) =
                   ]
               ] )
           ; ( End_of_image
-            , [ (* wait for decoder to complete final blocks.  Pump bits into the decoder to flush the bitstream reader. *)
-                bits_valid <-- vdd
-              ; sm.set_next Start
+            , [ (* Flush bytes through the bitstream decode to flush it. *)
+                flush_count <-- flush_count_next
+              ; bits_valid <-- vdd
+              ; when_ (flush_count_next ==:. 0) [ sm.set_next Start ]
               ] )
           ]
       ]);

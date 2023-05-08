@@ -1,0 +1,13 @@
+(cram
+ (enabled_if
+  (= %{profile} simulation))
+ (deps
+  test-env.sh
+  ../../bin/model.exe
+  ../../bin/simulate.exe
+  ../../../tools/bin/oyuv.exe
+  ../../test_data/Mouse480.jpg
+  ../../test_data/mini.jpg
+  ../../test_data/mini64x64.420
+  ../../test_data/mini64x64.422
+  ../../test_data/mini64x64.444))

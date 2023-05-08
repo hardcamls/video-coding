@@ -32,7 +32,6 @@ let test ?(waves = true) ?(error_tolerance = 2) ?num_blocks_to_decode jpeg =
   (* let headers, entropy_bits = Util.headers_and_entropy_coded_segment jpeg in *)
   let width = (Model.Header.frame headers |> Option.value_exn).width in
   let height = (Model.Header.frame headers |> Option.value_exn).height in
-  print_s [%message (width : int) (height : int)];
   let frame = Frame.create ~chroma_subsampling:C420 ~width ~height in
   let sim =
     Sim.create
@@ -103,7 +102,6 @@ let test ?(waves = true) ?(error_tolerance = 2) ?num_blocks_to_decode jpeg =
       | Some comp ->
         (* Run simulator *)
         let pixels = output_a_block () in
-        (* print_s [%message (pixels : Int.Hex.t array)]; *)
         Util.reconstruct ~block_number frame pixels;
         let max_reconstructed_diff =
           max_reconstructed_diff pixels (Model.Component.recon comp)
@@ -139,13 +137,6 @@ let%expect_test "test decoder" =
     ~f:(Waveform.print ~display_height:50 ~display_width:120 ~wave_width:2 ~start_cycle:0);
   [%expect
     {|
-    ((width 480) (height 320))
-    ((macroblock 0) (subblock 0) (block_number 0) (x_pos 0) (y_pos 0))
-    ((macroblock 0) (subblock 1) (block_number 1) (x_pos 0) (y_pos 0))
-    ((macroblock 0) (subblock 2) (block_number 2) (x_pos 0) (y_pos 0))
-    ((macroblock 0) (subblock 3) (block_number 3) (x_pos 0) (y_pos 0))
-    ((macroblock 0) (subblock 4) (block_number 4) (x_pos 0) (y_pos 0))
-    ((macroblock 0) (subblock 5) (block_number 5) (x_pos 0) (y_pos 0))
     ┌Signals───────────┐┌Waves─────────────────────────────────────────────────────────────────────────────────────────────┐
     │clock             ││┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌─│
     │                  ││   └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘ │

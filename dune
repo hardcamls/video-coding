@@ -1,0 +1,2 @@
+(env 
+  (simulation (ocamlopt_flags :standard -O2)))
