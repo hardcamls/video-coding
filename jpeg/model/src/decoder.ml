@@ -316,10 +316,10 @@ let init (header : Header.t) bits =
           rounded_height * component.vertical_sampling_factor / max_vscale
         in
         let actual_width =
-          rounded_width * component.horizontal_sampling_factor / max_hscale
+          frame.width * component.horizontal_sampling_factor / max_hscale
         in
         let actual_height =
-          rounded_height * component.vertical_sampling_factor / max_vscale
+          frame.height * component.vertical_sampling_factor / max_vscale
         in
         { Component.plane = Plane.create ~width:decoded_width ~height:decoded_height
         ; decoded_width
@@ -407,18 +407,16 @@ let crop (component : Component.t) =
     let plane =
       Plane.create ~width:component.actual_width ~height:component.actual_height
     in
-    for row = 0 to component.actual_height - 1 do
-      for col = 0 to component.actual_width - 1 do
-        Plane.(plane.![col, row] <- component.plane.![col, row])
-      done
-    done;
+    Plane.blit_available ~src:component.plane ~dst:plane;
     plane)
   else component.plane
 ;;
 
 let get_yuv_frame decoder =
-  let planes = Array.map decoder.components ~f:(fun component -> crop component) in
-  Frame.of_planes ~y:planes.(0) ~u:planes.(1) ~v:planes.(2)
+  Frame.of_planes
+    ~y:(crop decoder.components.(0))
+    ~u:(crop decoder.components.(1))
+    ~v:(crop decoder.components.(2))
 ;;
 
 let decode_a_frame bits =

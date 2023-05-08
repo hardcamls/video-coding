@@ -156,7 +156,6 @@ let write_bits
     let size = size value in
     let code = dc_table.(size) in
     let magnitude = magnitude ~size value in
-    (* Stdio.print_s [%message (size : int) (code : Tables.dc_coef) (magnitude : int)]; *)
     Writer.put_bits writer ~stuffing:true ~value:code.bits ~bits:code.length;
     Writer.put_bits writer ~stuffing:true ~value:magnitude ~bits:size
   in
@@ -164,8 +163,6 @@ let write_bits
     let size = size value in
     let code = ac_table.(run).(size) in
     let magnitude = magnitude ~size value in
-    (* Stdio.print_s
-      [%message (run : int) (size : int) (code : Tables.ac_coef) (magnitude : int)]; *)
     Writer.put_bits writer ~stuffing:true ~value:code.bits ~bits:code.length;
     Writer.put_bits writer ~stuffing:true ~value:magnitude ~bits:size
   in
@@ -432,7 +429,7 @@ type scan =
 
 type t =
   { params : Parameters.t
-  ; scans : scan list
+  ; scans : scan array
   ; writer : Writer.t
   }
 [@@defiving fields]
@@ -451,16 +448,15 @@ let create ?(compute_reconstruction_error = false) ~(params : Parameters.t) ~wri
           max acc c.vertical_sampling_factor) )
   in
   let scans =
-    List.init (Array.length params.scan_components) ~f:(fun i ->
-        let scan = params.scan_components.(i) in
+    Array.map params.scan_components ~f:(fun scan ->
+        let width = params.width * scan.horizontal_sampling_factor / max_hscale in
+        let height = params.height * scan.vertical_sampling_factor / max_vscale in
         let width =
-          Int.round_up ~to_multiple_of:(8 * scan.horizontal_sampling_factor) params.width
+          Int.round_up ~to_multiple_of:(8 * scan.horizontal_sampling_factor) width
         in
         let height =
-          Int.round_up ~to_multiple_of:(8 * scan.vertical_sampling_factor) params.height
+          Int.round_up ~to_multiple_of:(8 * scan.vertical_sampling_factor) height
         in
-        let width = width * scan.horizontal_sampling_factor / max_hscale in
-        let height = height * scan.vertical_sampling_factor / max_vscale in
         { hscale = scan.horizontal_sampling_factor
         ; vscale = scan.vertical_sampling_factor
         ; block = Block.create compute_reconstruction_error
@@ -475,16 +471,13 @@ let create ?(compute_reconstruction_error = false) ~(params : Parameters.t) ~wri
   { params; scans; writer }
 ;;
 
-let get_plane t idx = (List.nth_exn t.scans idx).plane
+let get_plane t idx = t.scans.(idx).plane
 
 let encode_seq (t : t) =
   let mbs_wide, mbs_high =
-    match t.scans with
-    | { hscale; vscale; plane; _ } :: _ ->
-      Plane.width plane / (8 * hscale), Plane.height plane / (8 * vscale)
-    | [] -> raise_s [%message "Image has no scans"]
+    let { hscale; vscale; plane; _ } = t.scans.(0) in
+    Plane.width plane / (8 * hscale), Plane.height plane / (8 * vscale)
   in
-  let scans = Sequence.of_list t.scans in
   let inner_blocks ~x_mb ~y_mb scan =
     Sequence.init scan.vscale ~f:(fun y_subblk ->
         Sequence.init scan.hscale ~f:(fun x_subblk ->
@@ -504,7 +497,9 @@ let encode_seq (t : t) =
   in
   Sequence.init mbs_high ~f:(fun y_mb ->
       Sequence.init mbs_wide ~f:(fun x_mb ->
-          Sequence.map scans ~f:(inner_blocks ~x_mb ~y_mb) |> Sequence.concat)
+          Sequence.init (Array.length t.scans) ~f:(fun i ->
+              inner_blocks ~x_mb ~y_mb t.scans.(i))
+          |> Sequence.concat)
       |> Sequence.concat)
   |> Sequence.concat
 ;;
@@ -516,9 +511,9 @@ let complete_and_write_eoi { writer; _ } =
 
 let encode_yuv ~frame ~writer ~params =
   let t = create ~params ~writer () in
-  Plane.blit ~src:(Frame.y frame) ~dst:(List.nth_exn t.scans 0).plane;
-  Plane.blit ~src:(Frame.u frame) ~dst:(List.nth_exn t.scans 1).plane;
-  Plane.blit ~src:(Frame.v frame) ~dst:(List.nth_exn t.scans 2).plane;
+  Plane.blit_available ~src:(Frame.y frame) ~dst:t.scans.(0).plane;
+  Plane.blit_available ~src:(Frame.u frame) ~dst:t.scans.(1).plane;
+  Plane.blit_available ~src:(Frame.v frame) ~dst:t.scans.(2).plane;
   write_headers ~params ~writer;
   Sequence.iter (encode_seq t) ~f:(fun _ -> ());
   complete_and_write_eoi t
@@ -550,7 +545,7 @@ let encode_monochrome ~frame ~quality ~writer =
     Parameters.monochrome ~width:(Plane.width frame) ~height:(Plane.height frame) ~quality
   in
   let t = create ~params ~writer () in
-  Plane.blit ~src:frame ~dst:(List.nth_exn t.scans 0).plane;
+  Plane.blit ~src:frame ~dst:t.scans.(0).plane;
   write_headers ~params ~writer;
   Sequence.iter (encode_seq t) ~f:(fun _ -> ());
   complete_and_write_eoi t
