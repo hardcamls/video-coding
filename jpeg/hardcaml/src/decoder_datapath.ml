@@ -6,6 +6,7 @@ module I = struct
     { clocking : 'a Clocking.t
     ; start_codeblock_decoder : 'a
     ; start_idct : 'a
+    ; start_output : 'a
     ; dht : 'a Markers.Dht.Fields.t
     ; dqt : 'a Markers.Dqt.Fields.t
     ; ac_table_select : 'a [@bits Scan_controller.log_max_scans]
@@ -37,12 +38,16 @@ module Idct = Dct.Make (Dct.Idct_config)
 let idct_with_rams
     ~scope
     ~(clocking : _ Clocking.t)
-    ~start
+    ~start_idct
+    ~start_output
     ~(coefs : _ Codeblock_decoder.Idct_coefs.t)
     ~(output_read_port : read_port)
   =
   let ( -- ) = Scope.naming scope in
-  let toggle = Clocking.reg_fb clocking ~enable:start ~width:1 ~f:( ~: ) -- "toggle" in
+  let toggle =
+    Clocking.reg_fb clocking ~enable:(start_idct |: start_output) ~width:1 ~f:( ~: )
+    -- "toggle"
+  in
   let idct = Idct.O.Of_signal.wires () in
   let iram =
     Ram.create
@@ -103,7 +108,11 @@ let idct_with_rams
   let idct' =
     Idct.hierarchical
       scope
-      { Idct.I.clocking; start; coef = iram.(0); transpose_coef_in = tram.(0) }
+      { Idct.I.clocking
+      ; start = start_idct
+      ; coef = iram.(0)
+      ; transpose_coef_in = tram.(0)
+      }
   in
   Idct.O.Of_signal.assign idct idct';
   oram.(0), idct.done_
@@ -170,7 +179,8 @@ let create scope (i : _ I.t) =
     idct_with_rams
       ~scope
       ~clocking:i.clocking
-      ~start:i.start_idct
+      ~start_idct:i.start_idct
+      ~start_output:i.start_output
       ~coefs:dequant.coefs_out
       ~output_read_port
   in

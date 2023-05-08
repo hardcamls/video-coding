@@ -38,6 +38,7 @@ let create scope (i : _ I.t) =
       { Decoder_datapath.I.clocking = i.clocking
       ; start_codeblock_decoder = controller.starts.codeblock_decoder
       ; start_idct = controller.starts.idct
+      ; start_output = controller.starts.output
       ; dht = bytestream.markers.dht
       ; dqt = bytestream.markers.dqt
       ; ac_table_select = controller.ac_table_select

@@ -10,6 +10,7 @@ module I : sig
     { clocking : 'a Clocking.t
     ; start_codeblock_decoder : 'a
     ; start_idct : 'a
+    ; start_output : 'a
     ; dht : 'a Markers.Dht.Fields.t
     ; dqt : 'a Markers.Dqt.Fields.t
     ; ac_table_select : 'a

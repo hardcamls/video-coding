@@ -43,6 +43,7 @@ let create scope (i : _ I.t) =
       { Decoder_datapath.I.clocking = i.clocking
       ; start_codeblock_decoder = i.start_codeblock_decoder
       ; start_idct = i.start_idct
+      ; start_output = Signal.gnd
       ; dht = i.dht
       ; dqt = i.dqt
       ; ac_table_select = i.ac_table_select
