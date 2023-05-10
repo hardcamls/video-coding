@@ -14,6 +14,8 @@ let to_spec ?clear_to (i : Signal.t t) =
   | None -> spec
 ;;
 
+let to_spec_no_clear (i : Signal.t t) = Reg_spec.create ~clock:i.clock ()
+
 let reg ?(enable = Signal.vdd) ?clear_to clocking d =
   Signal.reg (to_spec ?clear_to clocking) ~enable d
 ;;
