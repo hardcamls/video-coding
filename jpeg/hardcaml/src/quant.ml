@@ -6,11 +6,13 @@ let dct_coef_bits = 12
 let quant_coef_bits = 12
 let log_num_quant_tables = 1
 let num_quant_tables = 1 lsl log_num_quant_tables
+let pipeline_depth = 4
 
 module I = struct
   type 'a t =
     { clocking : 'a Clocking.t
     ; start : 'a
+    ; enable : 'a
     ; table_select : 'a [@bits log_num_quant_tables]
     ; dct_coef : 'a [@bits dct_coef_bits]
     ; dct_coef_write : 'a
@@ -46,14 +48,14 @@ let create _scope (i : _ I.t) =
       ~read_ports:
         [| { read_clock = i.clocking.clock
            ; read_address = i.table_select @: i.dct_coef_address
-           ; read_enable = i.dct_coef_write
+           ; read_enable = i.dct_coef_write &: i.enable
            }
         |]
       ()
   in
   let reg, pipe =
-    ( reg (Clocking.to_spec_no_clear i.clocking)
-    , pipeline (Clocking.to_spec_no_clear i.clocking) )
+    ( reg (Clocking.to_spec_no_clear i.clocking) ~enable:i.enable
+    , pipeline (Clocking.to_spec_no_clear i.clocking) ~enable:i.enable )
   in
   (* 4 cycles: 2 to look up coefficient, 1 for multiply, 1 for rounding. *)
   let q = reg qram.(0) in

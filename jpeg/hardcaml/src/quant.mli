@@ -5,11 +5,13 @@ val dct_coef_bits : int
 val quant_coef_bits : int
 val log_num_quant_tables : int
 val num_quant_tables : int
+val pipeline_depth : int
 
 module I : sig
   type 'a t =
     { clocking : 'a Clocking.t
     ; start : 'a
+    ; enable : 'a
     ; table_select : 'a
     ; dct_coef : 'a
     ; dct_coef_write : 'a

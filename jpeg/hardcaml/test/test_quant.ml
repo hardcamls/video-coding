@@ -120,6 +120,7 @@ let%expect_test "Test quantiser using random coefs and quant table entries" =
   inputs.quant_write <--. 0;
   Cyclesim.cycle sim;
   (* Run through test data  *)
+  inputs.enable := Bits.vdd;
   let results = ref [] in
   let cycle () =
     Cyclesim.cycle sim;
