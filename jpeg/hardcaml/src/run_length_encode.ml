@@ -84,3 +84,8 @@ let create scope (i : _ I.t) =
   ; done_ = sm.is Start
   }
 ;;
+
+let hierarchical scope =
+  let module Hier = Hierarchy.In_scope (I) (O) in
+  Hier.hierarchical ~scope ~name:"rle" create
+;;

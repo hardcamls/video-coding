@@ -10,7 +10,6 @@ val pipeline_depth : int
 module I : sig
   type 'a t =
     { clocking : 'a Clocking.t
-    ; start : 'a
     ; enable : 'a
     ; table_select : 'a
     ; dct_coef : 'a
@@ -33,3 +32,4 @@ module O : sig
 end
 
 val create : Scope.t -> Signal.t I.t -> Signal.t O.t
+val hierarchical : Scope.t -> Signal.t I.t -> Signal.t O.t

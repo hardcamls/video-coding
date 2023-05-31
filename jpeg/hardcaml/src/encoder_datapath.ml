@@ -13,7 +13,7 @@ module I = struct
 end
 
 module O = struct
-  type 'a t = { q : 'a Clocking.t } [@@deriving sexp_of, hardcaml]
+  type 'a t = { q : 'a } [@@deriving sexp_of, hardcaml]
 end
 
 module Dct = Dct.Make (Dct.Dct_config)
@@ -102,15 +102,39 @@ let create scope (i : _ I.t) =
     dct_with_rams
       ~scope
       ~clocking:i.clocking
-      ~start_dct:gnd
+      ~start_dct:gnd (* XX *)
       ~start_vlc:gnd
       ~pixel:i.pixel
       ~pixel_write_address:i.pixel_write_address
-      ~pixel_write_enable:i.pixel_write_address
+      ~pixel_write_enable:i.pixel_write_enable
       ~coef_read_port:
         { read_clock = i.clocking.clock; read_address = zero 6; read_enable = gnd }
   in
   (* quant pipeline *)
+  let _quant =
+    Quant.hierarchical
+      scope
+      { Quant.I.clocking = i.clocking
+      ; enable = gnd
+      ; table_select = zero Quant.log_num_quant_tables
+      ; dct_coef = zero Quant.dct_coef_bits
+      ; dct_coef_write = gnd
+      ; dct_coef_address = zero 6
+      ; quant = zero Quant.quant_coef_bits
+      ; quant_write = gnd
+      ; quant_address = zero (6 + Quant.log_num_quant_tables)
+      }
+  in
+  let _rle =
+    Run_length_encode.hierarchical
+      scope
+      { Run_length_encode.I.clocking = i.clocking; start = gnd; coef = zero 12 }
+  in
+  let _writer =
+    Bitstream_writer.hierarchical
+      scope
+      { Bitstream_writer.I.clocking = i.clocking; bits = zero 16; num_bits = zero 5 }
+  in
   (* run-length and huffman encode *)
   O.Of_signal.of_int 0
 ;;

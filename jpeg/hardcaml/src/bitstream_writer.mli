@@ -18,10 +18,13 @@ module O : sig
   [@@deriving sexp_of, hardcaml]
 end
 
-module Make (Comb : Comb.S) : sig
-  open Comb
-
-  val insert_at_bottom : buffer:t -> data_in:t -> bits:t -> t
-end
-
 val create : Scope.t -> Interface.Create_fn(I)(O).t
+val hierarchical : Scope.t -> Signal.t I.t -> Signal.t O.t
+
+module For_testing : sig
+  module Make (Comb : Comb.S) : sig
+    open Comb
+
+    val insert_at_bottom : buffer:t -> data_in:t -> bits:t -> t
+  end
+end

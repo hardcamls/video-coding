@@ -11,7 +11,6 @@ let pipeline_depth = 4
 module I = struct
   type 'a t =
     { clocking : 'a Clocking.t
-    ; start : 'a
     ; enable : 'a
     ; table_select : 'a [@bits log_num_quant_tables]
     ; dct_coef : 'a [@bits dct_coef_bits]
@@ -71,4 +70,9 @@ let create _scope (i : _ I.t) =
   ; quant_coef_address = pipe ~n:4 i.dct_coef_address
   ; quant_coef_write = pipe ~n:4 i.dct_coef_write
   }
+;;
+
+let hierarchical scope =
+  let module Hier = Hierarchy.In_scope (I) (O) in
+  Hier.hierarchical ~scope ~name:"qnt" create
 ;;
