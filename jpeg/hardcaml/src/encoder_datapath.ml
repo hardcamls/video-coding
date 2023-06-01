@@ -132,8 +132,8 @@ let create scope (i : _ I.t) =
       ; enable = vdd
       ; table_select = zero Quant.log_num_quant_tables
       ; dct_coef
-      ; dct_coef_write = gnd
-      ; dct_coef_address = zero 6
+      ; dct_coef_read = rle.quant_read
+      ; dct_coef_address = rle.quant_address
       ; quant = i.quant_write
       }
   in

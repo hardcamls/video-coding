@@ -24,9 +24,9 @@ module I = struct
     ; enable : 'a
     ; table_select : 'a [@bits log_num_quant_tables]
     ; dct_coef : 'a [@bits dct_coef_bits]
-    ; dct_coef_write : 'a
+    ; dct_coef_read : 'a
     ; dct_coef_address : 'a [@bits 6]
-    ; quant : 'a Quant_write.t
+    ; quant : 'a Quant_write.t [@rtlprefix "wr$"]
     }
   [@@deriving sexp_of, hardcaml]
 end
@@ -69,7 +69,7 @@ let create _scope (i : _ I.t) =
       ~read_ports:
         [| { read_clock = i.clocking.clock
            ; read_address = i.table_select @: i.dct_coef_address
-           ; read_enable = i.dct_coef_write &: i.enable
+           ; read_enable = i.dct_coef_read &: i.enable
            }
         |]
       ()
@@ -80,13 +80,13 @@ let create _scope (i : _ I.t) =
   in
   (* 4 cycles: 2 to look up coefficient, 1 for multiply, 1 for rounding. *)
   let q = reg qram.(0) in
-  let d = pipe ~n:2 i.dct_coef in
+  let d = reg i.dct_coef in
   let doq = reg (multiply (module Signal) d q) in
   let quant_coef = reg (round (module Signal) doq) in
   assert (width quant_coef = dct_coef_bits);
   { O.quant_coef
   ; quant_coef_address = pipe ~n:4 i.dct_coef_address
-  ; quant_coef_write = pipe ~n:4 i.dct_coef_write
+  ; quant_coef_write = pipe ~n:4 i.dct_coef_read
   }
 ;;
 

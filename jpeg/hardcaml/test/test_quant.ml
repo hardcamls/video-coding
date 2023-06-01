@@ -144,12 +144,16 @@ let%expect_test "Test quantiser using random coefs and quant table entries" =
         := (Bits.to_int !(outputs.quant_coef_address), Bits.to_sint !(outputs.quant_coef))
            :: !results
   in
+  (* feed in data - we model a 1 cycle input delay of the data *)
+  let last_coef = ref 0 in
   Array.iter qdata ~f:(fun (addr, data) ->
-      inputs.dct_coef <--. data;
-      inputs.dct_coef_write <--. 1;
+      inputs.dct_coef <--. !last_coef;
+      last_coef := data;
+      inputs.dct_coef_read <--. 1;
       inputs.dct_coef_address <--. addr;
       cycle ());
-  inputs.dct_coef_write <--. 0;
+  inputs.dct_coef <--. !last_coef;
+  inputs.dct_coef_read <--. 0;
   (* flush *)
   for _ = 0 to 10 do
     cycle ()

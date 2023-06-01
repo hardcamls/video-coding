@@ -23,7 +23,7 @@ module I : sig
     ; enable : 'a
     ; table_select : 'a
     ; dct_coef : 'a
-    ; dct_coef_write : 'a
+    ; dct_coef_read : 'a
     ; dct_coef_address : 'a
     ; quant : 'a Quant_write.t
     }
