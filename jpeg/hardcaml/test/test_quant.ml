@@ -112,12 +112,12 @@ let%expect_test "Test quantiser using random coefs and quant table entries" =
   let qdata = Array.init num_tests ~f:(fun _ -> Random.int 64, Random.int 4096 - 2048) in
   (* load quantisation table *)
   for i = 0 to 63 do
-    inputs.quant <--. (1 lsl Quant.quant_coef_bits) / qtab.(i);
-    inputs.quant_write <--. 1;
-    inputs.quant_address <--. i;
+    inputs.quant.quant <--. Quant.one_over_quant_coef qtab.(i);
+    inputs.quant.write <--. 1;
+    inputs.quant.address <--. i;
     Cyclesim.cycle sim
   done;
-  inputs.quant_write <--. 0;
+  inputs.quant.write <--. 0;
   Cyclesim.cycle sim;
   (* Run through test data  *)
   inputs.enable := Bits.vdd;

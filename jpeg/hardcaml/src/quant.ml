@@ -7,6 +7,16 @@ let quant_coef_bits = 12
 let log_num_quant_tables = 1
 let num_quant_tables = 1 lsl log_num_quant_tables
 let pipeline_depth = 4
+let one_over_quant_coef q = (1 lsl quant_coef_bits) / q
+
+module Quant_write = struct
+  type 'a t =
+    { quant : 'a [@bits quant_coef_bits]
+    ; write : 'a
+    ; address : 'a [@bits 6 + log_num_quant_tables]
+    }
+  [@@deriving sexp_of, hardcaml]
+end
 
 module I = struct
   type 'a t =
@@ -16,9 +26,7 @@ module I = struct
     ; dct_coef : 'a [@bits dct_coef_bits]
     ; dct_coef_write : 'a
     ; dct_coef_address : 'a [@bits 6]
-    ; quant : 'a [@bits quant_coef_bits]
-    ; quant_write : 'a
-    ; quant_address : 'a [@bits 6 + log_num_quant_tables]
+    ; quant : 'a Quant_write.t
     }
   [@@deriving sexp_of, hardcaml]
 end
@@ -39,9 +47,9 @@ let create _scope (i : _ I.t) =
       ~collision_mode:Write_before_read
       ~write_ports:
         [| { write_clock = i.clocking.clock
-           ; write_data = i.quant
-           ; write_address = i.quant_address
-           ; write_enable = i.quant_write
+           ; write_data = i.quant.quant
+           ; write_address = i.quant.address
+           ; write_enable = i.quant.write
            }
         |]
       ~read_ports:

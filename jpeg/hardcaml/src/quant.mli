@@ -6,6 +6,16 @@ val quant_coef_bits : int
 val log_num_quant_tables : int
 val num_quant_tables : int
 val pipeline_depth : int
+val one_over_quant_coef : int -> int
+
+module Quant_write : sig
+  type 'a t =
+    { quant : 'a
+    ; write : 'a
+    ; address : 'a
+    }
+  [@@deriving sexp_of, hardcaml]
+end
 
 module I : sig
   type 'a t =
@@ -15,9 +25,7 @@ module I : sig
     ; dct_coef : 'a
     ; dct_coef_write : 'a
     ; dct_coef_address : 'a
-    ; quant : 'a
-    ; quant_write : 'a
-    ; quant_address : 'a
+    ; quant : 'a Quant_write.t
     }
   [@@deriving sexp_of, hardcaml]
 end

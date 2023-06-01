@@ -5,15 +5,22 @@ open Signal
 module I = struct
   type 'a t =
     { clocking : 'a Clocking.t
+    ; start_dct : 'a
+    ; start_vlc : 'a
     ; pixel : 'a [@bits 8]
     ; pixel_write_address : 'a [@bits 6]
     ; pixel_write_enable : 'a
+    ; quant_write : 'a Quant.Quant_write.t
     }
   [@@deriving sexp_of, hardcaml]
 end
 
 module O = struct
-  type 'a t = { q : 'a } [@@deriving sexp_of, hardcaml]
+  type 'a t =
+    { q : 'a [@bits 12]
+    ; done_ : 'a
+    }
+  [@@deriving sexp_of, hardcaml]
 end
 
 module Dct = Dct.Make (Dct.Dct_config)
@@ -41,7 +48,10 @@ let dct_with_rams
       ~write_ports:
         [| { write_clock = clocking.clock
            ; write_address = toggle @: pixel_write_address
-           ; write_data = pixel
+           ; write_data =
+               pixel -:. 128
+               (* level shifted input *)
+               (* XXX register? *)
            ; write_enable = pixel_write_enable
            }
         |]
@@ -98,43 +108,48 @@ let dct_with_rams
 ;;
 
 let create scope (i : _ I.t) =
-  let _coef, _dct_done_ =
+  let rle = Run_length_encode.O.Of_signal.wires () in
+  let dct_coef, dct_done =
     dct_with_rams
       ~scope
       ~clocking:i.clocking
-      ~start_dct:gnd (* XX *)
-      ~start_vlc:gnd
+      ~start_dct:i.start_dct
+      ~start_vlc:i.start_vlc
       ~pixel:i.pixel
       ~pixel_write_address:i.pixel_write_address
       ~pixel_write_enable:i.pixel_write_enable
       ~coef_read_port:
-        { read_clock = i.clocking.clock; read_address = zero 6; read_enable = gnd }
+        { read_clock = i.clocking.clock
+        ; read_address = rle.quant_address
+        ; read_enable = rle.quant_read
+        }
   in
   (* quant pipeline *)
-  let _quant =
+  let quant =
     Quant.hierarchical
       scope
       { Quant.I.clocking = i.clocking
-      ; enable = gnd
+      ; enable = vdd
       ; table_select = zero Quant.log_num_quant_tables
-      ; dct_coef = zero Quant.dct_coef_bits
+      ; dct_coef
       ; dct_coef_write = gnd
       ; dct_coef_address = zero 6
-      ; quant = zero Quant.quant_coef_bits
-      ; quant_write = gnd
-      ; quant_address = zero (6 + Quant.log_num_quant_tables)
+      ; quant = i.quant_write
       }
   in
-  let _rle =
-    Run_length_encode.hierarchical
-      scope
-      { Run_length_encode.I.clocking = i.clocking; start = gnd; coef = zero 12 }
-  in
+  Run_length_encode.O.Of_signal.assign
+    rle
+    (Run_length_encode.hierarchical
+       scope
+       { Run_length_encode.I.clocking = i.clocking
+       ; start = i.start_vlc
+       ; coef = quant.quant_coef
+       });
   let _writer =
     Bitstream_writer.hierarchical
       scope
       { Bitstream_writer.I.clocking = i.clocking; bits = zero 16; num_bits = zero 5 }
   in
   (* run-length and huffman encode *)
-  O.Of_signal.of_int 0
+  { O.q = rle.coef; done_ = dct_done &: rle.done_ }
 ;;

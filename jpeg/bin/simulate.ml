@@ -107,6 +107,18 @@ let command_decoder_accelerator =
         Option.iter waves ~f:Hardcaml_waveterm_interactive.run]
 ;;
 
+let command_encoder_accelerator =
+  Command.basic
+    ~summary:"Decoder simulation"
+    [%map_open.Command
+      (* let _yuv = anon ("YUV" %: string)
+      and _jpeg = flag "-jpeg" (optional string) ~doc:"" *)
+      let waves = flag "-waves" no_arg ~doc:"Show waveform" in
+      fun () ->
+        let waves = Hardcaml_jpeg_test.Test_encoder_accelerator.test ~waves () in
+        Option.iter waves ~f:Hardcaml_waveterm_interactive.run]
+;;
+
 let command =
   Command.group
     ~summary:"JPEG core simulations"
@@ -114,7 +126,8 @@ let command =
     ; "codeblock", command_codeblock
     ; "bytestream-decoder", command_bytestream_decoder
     ; "decoder", command_decoder
-    ; "accelerator", command_decoder_accelerator
+    ; "decoder-accelerator", command_decoder_accelerator
+    ; "encoder-accelerator", command_encoder_accelerator
     ; "filter-stuffed-bytes", command_filter_stuffed_bytes
     ]
 ;;
