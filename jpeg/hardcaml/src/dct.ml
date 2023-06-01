@@ -42,7 +42,7 @@ module Make (Config : Config) = struct
     type 'a t =
       { clocking : 'a Clocking.t
       ; start : 'a
-      ; coef : 'a [@bits input_bits]
+      ; coef_in : 'a [@bits input_bits]
       ; transpose_coef_in : 'a [@bits transpose_bits]
       }
     [@@deriving sexp_of, hardcaml]
@@ -50,11 +50,11 @@ module Make (Config : Config) = struct
 
   module O = struct
     type 'a t =
-      { pixel : 'a [@bits output_bits]
-      ; pixel_write : 'a
+      { coef_out : 'a [@bits output_bits]
+      ; coef_out_write : 'a
       ; transpose_coef_out : 'a [@bits transpose_bits]
       ; transpose_write : 'a
-      ; coef_read : 'a
+      ; coef_in_read : 'a
       ; transpose_read : 'a
       ; read_address : 'a [@bits 6]
       ; write_address : 'a [@bits 6]
@@ -106,7 +106,7 @@ module Make (Config : Config) = struct
     in
     let mul =
       let coef =
-        mux2 (reg pass.value) i.transpose_coef_in (sresize i.coef transpose_bits)
+        mux2 (reg pass.value) i.transpose_coef_in (sresize i.coef_in transpose_bits)
       in
       reg (coef *+ dct_coef) -- "dct_mul"
     in
@@ -128,7 +128,7 @@ module Make (Config : Config) = struct
              (input_bits + 3)
              transpose_prec))
     in
-    let clipped_and_rounded_pixel =
+    let clipped_and_rounded_coef_out =
       let mac = Fixed.create (rom_prec + transpose_prec) mac in
       Fixed.(
         signal
@@ -178,11 +178,11 @@ module Make (Config : Config) = struct
     in
     let write_pass = pipeline ~n:3 pass.value in
     let write_address = pipeline ~n:3 (x.value @: y.value) in
-    { O.pixel = clipped_and_rounded_pixel
-    ; pixel_write = write &: write_pass
+    { O.coef_out = clipped_and_rounded_coef_out
+    ; coef_out_write = write &: write_pass
     ; transpose_coef_out = rounded_transpose_coef
     ; transpose_write = write &: ~:write_pass
-    ; coef_read = read &: ~:(pass.value)
+    ; coef_in_read = read &: ~:(pass.value)
     ; transpose_read = read &: pass.value
     ; read_address
     ; write_address

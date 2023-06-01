@@ -63,7 +63,7 @@ let idct_with_rams
       ~read_ports:
         [| { read_clock = clocking.clock
            ; read_address = ~:toggle @: idct.read_address
-           ; read_enable = idct.coef_read
+           ; read_enable = idct.coef_in_read
            }
         |]
       ()
@@ -94,8 +94,8 @@ let idct_with_rams
       ~write_ports:
         [| { write_clock = clocking.clock
            ; write_address = toggle @: idct.write_address
-           ; write_data = idct.pixel
-           ; write_enable = idct.pixel_write
+           ; write_data = idct.coef_out
+           ; write_enable = idct.coef_out_write
            }
         |]
       ~read_ports:
@@ -110,7 +110,7 @@ let idct_with_rams
       scope
       { Idct.I.clocking
       ; start = start_idct
-      ; coef = iram.(0)
+      ; coef_in = iram.(0)
       ; transpose_coef_in = tram.(0)
       }
   in

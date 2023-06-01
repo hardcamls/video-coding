@@ -58,7 +58,7 @@ let dct_with_rams
       ~read_ports:
         [| { read_clock = clocking.clock
            ; read_address = ~:toggle @: dct.read_address
-           ; read_enable = dct.coef_read
+           ; read_enable = dct.coef_in_read
            }
         |]
       ()
@@ -89,8 +89,8 @@ let dct_with_rams
       ~write_ports:
         [| { write_clock = clocking.clock
            ; write_address = toggle @: dct.write_address
-           ; write_data = dct.pixel
-           ; write_enable = dct.pixel_write
+           ; write_data = dct.coef_out
+           ; write_enable = dct.coef_out_write
            }
         |]
       ~read_ports:
@@ -101,7 +101,11 @@ let dct_with_rams
   let dct' =
     Dct.hierarchical
       scope
-      { Dct.I.clocking; start = start_dct; coef = iram.(0); transpose_coef_in = tram.(0) }
+      { Dct.I.clocking
+      ; start = start_dct
+      ; coef_in = iram.(0)
+      ; transpose_coef_in = tram.(0)
+      }
   in
   Dct.O.Of_signal.assign dct dct';
   oram.(0), dct.done_

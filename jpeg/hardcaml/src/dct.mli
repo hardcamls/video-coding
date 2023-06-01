@@ -24,7 +24,7 @@ module Make (Config : Config) : sig
     type 'a t =
       { clocking : 'a Clocking.t
       ; start : 'a
-      ; coef : 'a
+      ; coef_in : 'a
       ; transpose_coef_in : 'a
       }
     [@@deriving sexp_of, hardcaml]
@@ -32,11 +32,11 @@ module Make (Config : Config) : sig
 
   module O : sig
     type 'a t =
-      { pixel : 'a
-      ; pixel_write : 'a
+      { coef_out : 'a
+      ; coef_out_write : 'a
       ; transpose_coef_out : 'a
       ; transpose_write : 'a
-      ; coef_read : 'a
+      ; coef_in_read : 'a
       ; transpose_read : 'a
       ; read_address : 'a
       ; write_address : 'a
