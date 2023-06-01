@@ -39,5 +39,7 @@ module O : sig
   [@@deriving sexp_of, hardcaml]
 end
 
+val multiply : (module Comb.S with type t = 'a) -> 'a -> 'a -> 'a
+val round : (module Comb.S with type t = 'a) -> 'a -> 'a
 val create : Scope.t -> Signal.t I.t -> Signal.t O.t
 val hierarchical : Scope.t -> Signal.t I.t -> Signal.t O.t

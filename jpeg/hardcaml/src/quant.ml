@@ -3,11 +3,11 @@ open! Hardcaml
 open! Signal
 
 let dct_coef_bits = 12
-let quant_coef_bits = 12
+let quant_coef_bits = 13
 let log_num_quant_tables = 1
 let num_quant_tables = 1 lsl log_num_quant_tables
 let pipeline_depth = 4
-let one_over_quant_coef q = (1 lsl quant_coef_bits) / q
+let one_over_quant_coef q = (1 lsl (quant_coef_bits - 1)) / q
 
 module Quant_write = struct
   type 'a t =
@@ -40,6 +40,20 @@ module O = struct
   [@@deriving sexp_of, hardcaml]
 end
 
+let multiply (type a) (module Signal : Comb.S with type t = a) (d : a) q =
+  Signal.(d *+ ue q)
+;;
+
+let round (type a) (module Signal : Comb.S with type t = a) (doq : a) =
+  let open Signal in
+  let half = of_int ~width:(width doq) (1 lsl (quant_coef_bits - 2)) in
+  let half_minus_1 =
+    Signal.of_int ~width:(width doq) ((1 lsl (quant_coef_bits - 2)) - 1)
+  in
+  let rnd = mux2 (msb doq) half_minus_1 half in
+  lsbs (lsbs (drop_bottom (doq +: rnd) (quant_coef_bits - 1)))
+;;
+
 let create _scope (i : _ I.t) =
   let qram =
     Ram.create
@@ -67,13 +81,9 @@ let create _scope (i : _ I.t) =
   (* 4 cycles: 2 to look up coefficient, 1 for multiply, 1 for rounding. *)
   let q = reg qram.(0) in
   let d = pipe ~n:2 i.dct_coef in
-  let half = Signal.of_int ~width:(width d + width q) (1 lsl (quant_coef_bits - 1)) in
-  let half_minus_1 =
-    Signal.of_int ~width:(width d + width q) ((1 lsl (quant_coef_bits - 1)) - 1)
-  in
-  let doq = reg (d *+ q) in
-  let rnd = mux2 (msb doq) half_minus_1 half in
-  let quant_coef = reg (drop_bottom (doq +: rnd) quant_coef_bits) in
+  let doq = reg (multiply (module Signal) d q) in
+  let quant_coef = reg (round (module Signal) doq) in
+  assert (width quant_coef = dct_coef_bits);
   { O.quant_coef
   ; quant_coef_address = pipe ~n:4 i.dct_coef_address
   ; quant_coef_write = pipe ~n:4 i.dct_coef_write

@@ -7,6 +7,12 @@ module Sim = Cyclesim.With_interface (Encoder.I) (Encoder.O)
 let ( <--. ) a b = a := Bits.of_int ~width:(Bits.width !a) b
 let qtable = Hardcaml_jpeg_model.Quant_tables.(scale luma 95)
 
+let%expect_test "" = print_s [%message (qtable : int array)];
+  [%expect {|
+    (qtable
+     (2 1 1 2 2 4 5 6 1 1 1 2 3 6 6 6 1 1 2 2 4 6 7 6 1 2 2 3 5 9 8 6 2 2 4 6 7
+      11 10 8 2 4 6 6 8 10 11 9 5 6 8 9 10 12 12 10 7 9 10 10 11 10 10 10)) |}]
+
 let test ?(waves = false) () =
   let sim =
     Sim.create
