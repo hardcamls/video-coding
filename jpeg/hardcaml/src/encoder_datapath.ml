@@ -17,7 +17,11 @@ end
 
 module O = struct
   type 'a t =
-    { q : 'a [@bits 12]
+    { run : 'a [@bits 6]
+    ; coef : 'a [@bits 12]
+    ; last : 'a
+    ; dc : 'a
+    ; run_coef_write : 'a
     ; done_ : 'a
     }
   [@@deriving sexp_of, hardcaml]
@@ -155,5 +159,11 @@ let create scope (i : _ I.t) =
       { Bitstream_writer.I.clocking = i.clocking; bits = zero 16; num_bits = zero 5 }
   in
   (* run-length and huffman encode *)
-  { O.q = rle.coef; done_ = dct_done &: rle.done_ }
+  { O.run = rle.run
+  ; coef = rle.coef
+  ; last = rle.last
+  ; dc = rle.dc
+  ; run_coef_write = rle.run_coef_write
+  ; done_ = dct_done &: rle.done_
+  }
 ;;

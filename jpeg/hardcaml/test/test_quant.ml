@@ -100,10 +100,6 @@ module Sim = Cyclesim.With_interface (Quant.I) (Quant.O)
 
 let ( <--. ) a b = a := Bits.of_int ~width:(Bits.width !a) b
 
-(* XX I think there is a bug when the quant factor is [1].  
-   The inverse scaled multiplier is larger than the port width 
-   for the quantiser. *)
-
 let%expect_test "Test quantiser using random coefs and quant table entries" =
   let num_tests = 10_000 in
   let sim = Sim.create (Quant.create (Scope.create ())) in
