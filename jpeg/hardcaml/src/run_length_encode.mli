@@ -1,6 +1,18 @@
 open! Base
 open Hardcaml
 
+module Rle : sig
+  type 'a t =
+    { run : 'a
+    ; coef : 'a
+    ; last : 'a
+    ; dc : 'a
+    }
+  [@@deriving sexp_of, hardcaml]
+end
+
+module Rle_out : With_valid.Wrap.M(Rle).S
+
 module I : sig
   type 'a t =
     { clocking : 'a Clocking.t
@@ -12,11 +24,7 @@ end
 
 module O : sig
   type 'a t =
-    { run : 'a
-    ; coef : 'a
-    ; last : 'a
-    ; dc : 'a
-    ; run_coef_write : 'a
+    { rle_out : 'a Rle_out.t
     ; quant_address : 'a
     ; quant_read : 'a
     ; done_ : 'a

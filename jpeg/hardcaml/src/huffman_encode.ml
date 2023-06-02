@@ -2,19 +2,11 @@ open! Base
 open! Hardcaml
 open! Signal
 
-module Coef = struct
-  type 'a t =
-    { coef : 'a [@bits 12]
-    ; run : 'a [@bits 4]
-    }
-  [@@deriving sexp_of, hardcaml]
-end
-
 module I = struct
   type 'a t =
     { clocking : 'a Clocking.t
     ; start : 'a
-    ; coef : 'a Coef.t
+    ; rle_in : 'a Run_length_encode.Rle_out.t
     ; luma : 'a
     ; bits_writer_ready : 'a
     }
@@ -25,21 +17,14 @@ module O = struct
   type 'a t =
     { bits : 'a [@bits 5]
     ; write_bits : 'a [@bits 16]
-    ; coef_address : 'a [@bits 6]
-    ; coef_read_enable : 'a
-    ; done_ : 'a
     }
   [@@deriving sexp_of, hardcaml]
 end
 
 module State = struct
   type t =
-    | Start
-    | Preroll
-    | Dc
-    | Dc_magnitude
-    | Ac
-    | Ac_magnitude
+    | Code
+    | Magnitude
   [@@deriving sexp_of, compare, enumerate]
 end
 
@@ -116,46 +101,13 @@ let create scope (i : _ I.t) =
   let ( -- ) = Scope.naming scope in
   let sm = Always.State_machine.create (module State) (Clocking.to_spec i.clocking) in
   ignore (sm.current -- "STATE" : Signal.t);
-  let size = size (module Signal) i.coef.coef in
-  let _mag = mag (module Signal) size i.coef.coef in
-  let dc = Var.wire ~default:gnd in
+  let size = size (module Signal) i.rle_in.value.coef in
+  let mag = mag (module Signal) size i.rle_in.value.coef in
   let { Tables.Code.code = code_value; bits = num_bits } =
-    Tables.create ~size ~run:i.coef.run ~luma:i.luma ~dc:dc.value
+    Tables.create ~size ~run:i.rle_in.value.run ~luma:i.luma ~dc:i.rle_in.value.dc
   in
-  let address = Clocking.Var.reg i.clocking ~width:6 in
-  let address_next = address.value +:. 1 in
-  let read_enable = Var.wire ~default:gnd in
-  let ac_count = Clocking.Var.reg i.clocking ~width:6 in
-  ignore (ac_count.value -- "ac_count" : Signal.t);
   Always.(
     compile
-      [ sm.switch
-          [ ( Start
-            , [ address <--. 0; ac_count <--. 0; when_ i.start [ sm.set_next Preroll ] ] )
-          ; Preroll, [ read_enable <-- vdd; address <-- address_next; sm.set_next Dc ]
-          ; Dc, [ dc <-- vdd; sm.set_next Dc_magnitude ]
-          ; ( Dc_magnitude
-            , [ dc <-- vdd
-              ; read_enable <-- vdd
-              ; address <-- address_next
-              ; sm.set_next Ac
-              ] )
-          ; ( Ac
-            , [ ac_count <-- ac_count.value +: uresize i.coef.run 6 +:. 1
-              ; sm.set_next Ac_magnitude
-              ] )
-          ; ( Ac_magnitude
-            , [ read_enable <-- vdd
-              ; address <-- address_next
-              ; sm.set_next Ac
-              ; when_ (ac_count.value ==:. 63) [ sm.set_next Start ]
-              ] )
-          ]
-      ]);
-  { O.bits = num_bits
-  ; write_bits = code_value
-  ; coef_address = address.value
-  ; coef_read_enable = read_enable.value
-  ; done_ = sm.is Start
-  }
+      [ sm.switch [ Code, [ sm.set_next Magnitude ]; Magnitude, [ sm.set_next Code ] ] ]);
+  { O.bits = num_bits; write_bits = mux2 (sm.is Code) code_value mag }
 ;;

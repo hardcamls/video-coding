@@ -2,6 +2,18 @@ open Base
 open Hardcaml
 open Signal
 
+module Rle = struct
+  type 'a t =
+    { run : 'a [@bits 6]
+    ; coef : 'a [@bits 12]
+    ; last : 'a
+    ; dc : 'a
+    }
+  [@@deriving sexp_of, hardcaml]
+end
+
+module Rle_out = With_valid.Wrap.Make (Rle)
+
 module I = struct
   type 'a t =
     { clocking : 'a Clocking.t
@@ -13,11 +25,7 @@ end
 
 module O = struct
   type 'a t =
-    { run : 'a [@bits 6]
-    ; coef : 'a [@bits 12]
-    ; last : 'a
-    ; dc : 'a
-    ; run_coef_write : 'a
+    { rle_out : 'a Rle_out.t
     ; quant_address : 'a [@bits 6]
     ; quant_read : 'a
     ; done_ : 'a
@@ -74,11 +82,11 @@ let create scope (i : _ I.t) =
           ]
       ]);
   let reg = Clocking.reg i.clocking in
-  { O.run = reg run.value
-  ; coef = reg i.coef
-  ; last = reg last
-  ; run_coef_write = reg run_coef_write.value
-  ; dc = reg (sm.is Dc)
+  { O.rle_out =
+      { value =
+          { run = reg run.value; coef = reg i.coef; last = reg last; dc = reg (sm.is Dc) }
+      ; valid = reg run_coef_write.value
+      }
   ; quant_address = address.value.:[5, 0]
   ; quant_read = read_enable.value
   ; done_ = sm.is Start

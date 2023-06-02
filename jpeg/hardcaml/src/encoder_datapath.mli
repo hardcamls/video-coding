@@ -16,11 +16,7 @@ end
 
 module O : sig
   type 'a t =
-    { run : 'a
-    ; coef : 'a
-    ; last : 'a
-    ; dc : 'a
-    ; run_coef_write : 'a
+    { rle_out : 'a Run_length_encode.Rle_out.t
     ; done_ : 'a
     }
   [@@deriving sexp_of, hardcaml]
