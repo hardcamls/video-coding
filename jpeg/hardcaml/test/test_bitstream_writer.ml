@@ -177,10 +177,10 @@ let%expect_test "small tests" =
   for _ = 1 to 100 do
     random_test 100
   done;
-  [%expect {| |}]
+  [%expect{||}]
 ;;
 
 let%expect_test "big test" =
   random_test 10_000;
-  [%expect {| |}]
+  [%expect{||}]
 ;;

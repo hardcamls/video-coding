@@ -2,22 +2,37 @@ open Base
 open Hardcaml
 open Signal
 
+module Starts = struct
+  type 'a t =
+    { dct : 'a
+    ; vlc : 'a
+    }
+  [@@deriving sexp_of, hardcaml]
+end
+
+module Pixels = struct
+  type 'a t =
+    { data : 'a [@bits 8]
+    ; write_address : 'a [@bits 6]
+    ; write_enable : 'a
+    }
+  [@@deriving sexp_of, hardcaml]
+end
+
 module I = struct
   type 'a t =
     { clocking : 'a Clocking.t
-    ; start_dct : 'a
-    ; start_vlc : 'a
-    ; pixel : 'a [@bits 8]
-    ; pixel_write_address : 'a [@bits 6]
-    ; pixel_write_enable : 'a
-    ; quant_write : 'a Quant.Quant_write.t
+    ; starts : 'a Starts.t [@rtlprefix "starts$"]
+    ; pixels : 'a Pixels.t [@rtlprefix "pixels$"]
+    ; quant_write : 'a Quant.Quant_write.t [@rtlprefix "qnt$"]
     }
   [@@deriving sexp_of, hardcaml]
 end
 
 module O = struct
   type 'a t =
-    { rle_out : 'a Run_length_encode.Rle_out.t
+    { rle_out : 'a Run_length_encode.Rle_out.t [@rtlprefix "rle$"]
+    ; bitstream : 'a Bitstream_writer.O.t [@rtlprefix "bits$"]
     ; done_ : 'a
     }
   [@@deriving sexp_of, hardcaml]
@@ -117,11 +132,11 @@ let create scope (i : _ I.t) =
     dct_with_rams
       ~scope
       ~clocking:i.clocking
-      ~start_dct:i.start_dct
-      ~start_vlc:i.start_vlc
-      ~pixel:i.pixel
-      ~pixel_write_address:i.pixel_write_address
-      ~pixel_write_enable:i.pixel_write_enable
+      ~start_dct:i.starts.dct
+      ~start_vlc:i.starts.vlc
+      ~pixel:i.pixels.data
+      ~pixel_write_address:i.pixels.write_address
+      ~pixel_write_enable:i.pixels.write_enable
       ~coef_read_port:
         { read_clock = i.clocking.clock
         ; read_address = rle.quant_address
@@ -146,14 +161,31 @@ let create scope (i : _ I.t) =
     (Run_length_encode.hierarchical
        scope
        { Run_length_encode.I.clocking = i.clocking
-       ; start = i.start_vlc
+       ; start = i.starts.vlc
        ; coef = quant.quant_coef
        });
-  let _writer =
+  let huffman =
+    Huffman_encode.hierarchical
+      scope
+      { Huffman_encode.I.clocking = i.clocking
+      ; rle_in = rle.rle_out
+      ; luma = vdd
+      ; bits_writer_ready = vdd
+      }
+  in
+  let bitstream =
     Bitstream_writer.hierarchical
       scope
-      { Bitstream_writer.I.clocking = i.clocking; bits = zero 16; num_bits = zero 5 }
+      { Bitstream_writer.I.clocking = i.clocking
+      ; bits = huffman.bits
+      ; num_bits = huffman.num_bits
+      }
   in
   (* run-length and huffman encode *)
-  { O.rle_out = rle.rle_out; done_ = dct_done &: rle.done_ }
+  { O.rle_out = rle.rle_out; bitstream; done_ = dct_done &: rle.done_ }
+;;
+
+let hierarchical scope =
+  let module Hier = Hierarchy.In_scope (I) (O) in
+  Hier.hierarchical ~scope ~name:"encdp" create
 ;;

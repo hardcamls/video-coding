@@ -65,9 +65,6 @@ let test ?(waves = false) () =
   inputs.clocking.clear := Bits.vdd;
   Cyclesim.cycle sim;
   inputs.clocking.clear := Bits.gnd;
-  inputs.start := Bits.vdd;
-  Cyclesim.cycle sim;
-  inputs.start := Bits.gnd;
   let cycle () = Cyclesim.cycle sim in
   let pos = ref 0 in
   for _ = 0 to 10 do
@@ -85,27 +82,34 @@ let test ?(waves = false) () =
   waves
 ;;
 
-let%expect_test "" =
+let%expect_test "simulation" =
   Option.iter
     (test ~waves:true ())
-    ~f:(Waveform.print ~display_width:100 ~display_height:40 ~wave_width:2 ~start_cycle:0);
-  [%expect.unreachable]
-[@@expect.uncaught_exn {|
-  (* CR expect_test_collector: This test expectation appears to contain a backtrace.
-     This is strongly discouraged as backtraces are fragile.
-     Please change this test to not include a backtrace. *)
-
-  ("[mux] got inputs of different widths"
-    ((and (width 12) (arguments (mux mux)))
-      (mux (width 16) (select wire) (data (mux mux)))))
-  Raised at Base__Error.raise in file "src/error.ml" (inlined), line 9, characters 14-30
-  Called from Base__Error.raise_s in file "src/error.ml", line 10, characters 19-40
-  Called from Stdlib__List.iter in file "list.ml", line 110, characters 12-15
-  Called from Hardcaml__Comb.Make.mux in file "hardcaml/src/comb.ml", line 447, characters 4-30
-  Called from Hardcaml_jpeg__Huffman_encode.create in file "video-coding/jpeg/hardcaml/src/huffman_encode.ml", line 112, characters 36-68
-  Called from Hardcaml__Circuit.With_interface.create_exn in file "hardcaml/src/circuit.ml", line 398, characters 18-30
-  Called from Hardcaml__Cyclesim.With_interface.create in file "hardcaml/src/cyclesim.ml", line 117, characters 18-81
-  Called from Hardcaml_jpeg_test__Test_huffman_encode.test in file "video-coding/jpeg/hardcaml/test/test_huffman_encode.ml", line 54, characters 4-83
-  Called from Hardcaml_jpeg_test__Test_huffman_encode.(fun) in file "video-coding/jpeg/hardcaml/test/test_huffman_encode.ml", line 90, characters 4-25
-  Called from Expect_test_collector.Make.Instance_io.exec in file "collector/expect_test_collector.ml", line 262, characters 12-19 |}]
+    ~f:(Waveform.print ~display_width:100 ~display_height:25 ~wave_width:2 ~start_cycle:0);
+  [%expect{|
+    ┌Signals───────────┐┌Waves─────────────────────────────────────────────────────────────────────────┐
+    │clock             ││┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  │
+    │                  ││   └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──│
+    │clear             ││──────┐                                                                       │
+    │                  ││      └─────────────────────────────────────────────────────────────────      │
+    │luma              ││                                                                              │
+    │                  ││────────────────────────────────────────────────────────────────────────      │
+    │valid             ││                                                                              │
+    │                  ││────────────────────────────────────────────────────────────────────────      │
+    │                  ││──────┬─────┬─────┬─────────────────────────────────────────────────────      │
+    │value$coef        ││ 000  │003  │020  │000                                                        │
+    │                  ││──────┴─────┴─────┴─────────────────────────────────────────────────────      │
+    │value$dc          ││                                                                              │
+    │                  ││────────────────────────────────────────────────────────────────────────      │
+    │                  ││────────────┬─────┬─────────────────────────────────────────────────────      │
+    │value$run         ││ 00         │3E   │00                                                         │
+    │                  ││────────────┴─────┴─────────────────────────────────────────────────────      │
+    │                  ││──────┬─────┬─────┬─────────────────────────────────────────────────────      │
+    │bits              ││ 0000 │0004 │FFFA │0000                                                       │
+    │                  ││──────┴─────┴─────┴─────────────────────────────────────────────────────      │
+    │                  ││────────────────────────────────────────────────────────────────────────      │
+    │num_bits          ││ 00                                                                           │
+    │                  ││────────────────────────────────────────────────────────────────────────      │
+    │STATE             ││                                                                              │
+    └──────────────────┘└──────────────────────────────────────────────────────────────────────────────┘ |}]
 ;;

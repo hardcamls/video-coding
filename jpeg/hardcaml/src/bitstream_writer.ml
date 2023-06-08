@@ -33,7 +33,8 @@ include Make (Signal)
 
 (* XXX need to do something about stuff bytes, and flushing. *)
 
-let create _scope (i : _ I.t) =
+let create scope (i : _ I.t) =
+  let ( -- ) = Scope.naming scope in
   let buffer_bits = 32 in
   let max_output_shift = buffer_bits - 16 in
   let buffer = Clocking.Var.reg i.clocking ~width:buffer_bits in
@@ -49,7 +50,11 @@ let create _scope (i : _ I.t) =
     compile
       [ count <-- lsbs count_next
       ; when_ bits_valid [ count <-- lsbs (count_next -:. 16) ]
-      ; buffer <-- insert_at_bottom ~buffer:buffer.value ~data_in:i.bits ~bits:i.num_bits
+      ; when_
+          (i.num_bits <>:. 0)
+          [ buffer
+            <-- insert_at_bottom ~buffer:buffer.value ~data_in:i.bits ~bits:i.num_bits
+          ]
       ]);
   { O.bits_out = (log_shift srl buffer.value output_shift).:[15, 0]; bits_valid }
 ;;

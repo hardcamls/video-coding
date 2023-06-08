@@ -7,11 +7,14 @@ module Sim = Cyclesim.With_interface (Encoder.I) (Encoder.O)
 let ( <--. ) a b = a := Bits.of_int ~width:(Bits.width !a) b
 let qtable = Hardcaml_jpeg_model.Quant_tables.(scale luma 95)
 
-let%expect_test "" = print_s [%message (qtable : int array)];
-  [%expect {|
+let%expect_test "quant values" =
+  print_s [%message (qtable : int array)];
+  [%expect
+    {|
     (qtable
      (2 1 1 2 2 4 5 6 1 1 1 2 3 6 6 6 1 1 2 2 4 6 7 6 1 2 2 3 5 9 8 6 2 2 4 6 7
       11 10 8 2 4 6 6 8 10 11 9 5 6 8 9 10 12 12 10 7 9 10 10 11 10 10 10)) |}]
+;;
 
 let test ?(waves = false) () =
   let sim =
@@ -40,20 +43,20 @@ let test ?(waves = false) () =
       Cyclesim.cycle sim);
   inputs.quant_write.write <--. 0;
   let start block dct vlc =
-    inputs.start_dct := Bits.of_bool dct;
-    inputs.start_vlc := Bits.of_bool vlc;
+    inputs.starts.dct := Bits.of_bool dct;
+    inputs.starts.vlc := Bits.of_bool vlc;
     Cyclesim.cycle sim;
-    inputs.start_dct := Bits.gnd;
-    inputs.start_vlc := Bits.gnd;
-    inputs.pixel_write_enable := Bits.vdd;
+    inputs.starts.dct := Bits.gnd;
+    inputs.starts.vlc := Bits.gnd;
+    inputs.pixels.write_enable := Bits.vdd;
     Array.iteri block ~f:(fun address data ->
-        inputs.pixel_write_address <--. address;
-        inputs.pixel <--. data;
+        inputs.pixels.write_address <--. address;
+        inputs.pixels.data <--. data;
         Cyclesim.cycle sim);
     while not (Bits.to_bool !(outputs.done_)) do
       Cyclesim.cycle sim
     done;
-    inputs.pixel_write_enable := Bits.vdd
+    inputs.pixels.write_enable := Bits.vdd
   in
   let zblk = Array.init 64 ~f:(Fn.const 0) in
   start zblk false false;

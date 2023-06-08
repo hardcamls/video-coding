@@ -5,7 +5,6 @@ open! Signal
 module I = struct
   type 'a t =
     { clocking : 'a Clocking.t
-    ; start : 'a
     ; rle_in : 'a Run_length_encode.Rle_out.t
     ; luma : 'a
     ; bits_writer_ready : 'a
@@ -15,8 +14,8 @@ end
 
 module O = struct
   type 'a t =
-    { bits : 'a [@bits 5]
-    ; write_bits : 'a [@bits 16]
+    { num_bits : 'a [@bits 5]
+    ; bits : 'a [@bits 16]
     }
   [@@deriving sexp_of, hardcaml]
 end
@@ -103,11 +102,22 @@ let create scope (i : _ I.t) =
   ignore (sm.current -- "STATE" : Signal.t);
   let size = size (module Signal) i.rle_in.value.coef in
   let mag = mag (module Signal) size i.rle_in.value.coef in
-  let { Tables.Code.code = code_value; bits = num_bits } =
+  let { Tables.Code.code = code_value; bits = code_bits } =
     Tables.create ~size ~run:i.rle_in.value.run ~luma:i.luma ~dc:i.rle_in.value.dc
   in
   Always.(
     compile
-      [ sm.switch [ Code, [ sm.set_next Magnitude ]; Magnitude, [ sm.set_next Code ] ] ]);
-  { O.bits = num_bits; write_bits = mux2 (sm.is Code) code_value mag }
+      [ sm.switch
+          [ Code, [ when_ i.rle_in.valid [ sm.set_next Magnitude ] ]
+          ; Magnitude, [ sm.set_next Code ]
+          ]
+      ]);
+  { O.num_bits = mux2 (sm.is Code) (mux2 i.rle_in.valid code_bits (zero 5)) (ue size)
+  ; bits = mux2 (sm.is Code) code_value (uresize mag 16)
+  }
+;;
+
+let hierarchical scope =
+  let module Hier = Hierarchy.In_scope (I) (O) in
+  Hier.hierarchical ~scope ~name:"huff" create
 ;;

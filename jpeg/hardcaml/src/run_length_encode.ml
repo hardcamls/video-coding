@@ -38,7 +38,9 @@ module State = struct
     | Start
     | Preroll_quant
     | Dc
+    | Dc_wait
     | Ac
+    | Ac_wait
   [@@deriving sexp_of, compare, enumerate]
 end
 
@@ -68,8 +70,9 @@ let create scope (i : _ I.t) =
             , [ read_enable <--. 1
               ; run_coef_write <-- vdd
               ; address <-- address_next
-              ; sm.set_next Ac
+              ; sm.set_next Dc_wait
               ] )
+          ; Dc_wait, [ sm.set_next Ac ]
           ; ( Ac
             , [ read_enable <-- (address.value <:. 64)
               ; address <-- address_next
@@ -79,13 +82,14 @@ let create scope (i : _ I.t) =
                   [ run_coef_write <-- vdd; run <--. 0 ]
               ; when_ last [ run_coef_write <-- vdd; sm.set_next Start ]
               ] )
+          ; Ac_wait, []
           ]
       ]);
-  let reg = Clocking.reg i.clocking in
+  let reg = Clocking.reg ~enable:run_coef_write.value i.clocking in
   { O.rle_out =
       { value =
           { run = reg run.value; coef = reg i.coef; last = reg last; dc = reg (sm.is Dc) }
-      ; valid = reg run_coef_write.value
+      ; valid = Clocking.reg i.clocking run_coef_write.value
       }
   ; quant_address = address.value.:[5, 0]
   ; quant_read = read_enable.value
