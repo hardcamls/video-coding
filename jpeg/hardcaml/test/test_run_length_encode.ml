@@ -17,9 +17,9 @@ module Rle = struct
     let a = Array.init 64 ~f:(fun _ -> 0) in
     let pos = ref 0 in
     List.iter t ~f:(fun { run; coef } ->
-        pos := !pos + run;
-        a.(!pos) <- coef;
-        pos := !pos + 1);
+      pos := !pos + run;
+      a.(!pos) <- coef;
+      pos := !pos + 1);
     assert (!pos = 64);
     a
   ;;
@@ -59,14 +59,14 @@ let test ?(waves = false) ?(verbose = false) (rle : Rle.t) =
     if Bits.to_bool !(outputs.rle_out.valid)
     then
       results
-        := { Rle.run = Bits.to_int !(outputs.rle_out.value.run)
-           ; coef = Bits.to_int !(outputs.rle_out.value.coef)
-           }
-           :: !results;
-    inputs.coef := Bits.of_int ~width:12 coefs.(address.(0));
+      := { Rle.run = Bits.to_int_trunc !(outputs.rle_out.value.run)
+         ; coef = Bits.to_int_trunc !(outputs.rle_out.value.coef)
+         }
+         :: !results;
+    inputs.coef := Bits.of_int_trunc ~width:12 coefs.(address.(0));
     shift_address ();
     if Bits.to_bool !(outputs.quant_read)
-    then address.(Array.length address - 1) <- Bits.to_int !(outputs.quant_address)
+    then address.(Array.length address - 1) <- Bits.to_int_trunc !(outputs.quant_address)
   in
   while not (Bits.to_bool !(outputs.done_)) do
     cycle ()
@@ -125,8 +125,9 @@ let%expect_test "All zeros" =
     │value$run         ││ 00                                                                           │
     │                  ││──────────────────────────────────────────────────────────────────────────────│
     │                  ││────────────┬───────────────────────┬─────┬─────┬─────────────────────────────│
-    │STATE             ││ 0          │1                      │2    │3    │4                            │
-    └──────────────────┘└──────────────────────────────────────────────────────────────────────────────┘ |}]
+    │STATE             ││ Start      │Preroll_quant          │Dc   │Dc_w.│Ac                           │
+    └──────────────────┘└──────────────────────────────────────────────────────────────────────────────┘
+    |}]
 ;;
 
 let%expect_test "Single dc coef" =
@@ -165,8 +166,9 @@ let%expect_test "Single dc coef" =
     │value$run         ││ 00                                                                           │
     │                  ││──────────────────────────────────────────────────────────────────────────────│
     │                  ││────────────┬───────────────────────┬─────┬─────┬─────────────────────────────│
-    │STATE             ││ 0          │1                      │2    │3    │4                            │
-    └──────────────────┘└──────────────────────────────────────────────────────────────────────────────┘ |}]
+    │STATE             ││ Start      │Preroll_quant          │Dc   │Dc_w.│Ac                           │
+    └──────────────────┘└──────────────────────────────────────────────────────────────────────────────┘
+    |}]
 ;;
 
 let%expect_test "first and last" =
@@ -205,8 +207,9 @@ let%expect_test "first and last" =
     │value$run         ││ 00                                         │3E                               │
     │                  ││────────────────────────────────────────────┴───────────────                  │
     │                  ││────────────────────────────────────────────┬───────────────                  │
-    │STATE             ││ 4                                          │0                                │
-    └──────────────────┘└──────────────────────────────────────────────────────────────────────────────┘ |}]
+    │STATE             ││ Ac                                         │Start                            │
+    └──────────────────┘└──────────────────────────────────────────────────────────────────────────────┘
+    |}]
 ;;
 
 let%expect_test "first and second" =
@@ -255,8 +258,9 @@ let%expect_test "first and second" =
     │value$run         ││ 00                                                                           │
     │                  ││──────────────────────────────────────────────────────────────────────────────│
     │                  ││────────────┬───────────────────────┬─────┬─────┬─────────────────────────────│
-    │STATE             ││ 0          │1                      │2    │3    │4                            │
-    └──────────────────┘└──────────────────────────────────────────────────────────────────────────────┘ |}]
+    │STATE             ││ Start      │Preroll_quant          │Dc   │Dc_w.│Ac                           │
+    └──────────────────┘└──────────────────────────────────────────────────────────────────────────────┘
+    |}]
 ;;
 
 let%expect_test "first, second and last" =
@@ -266,12 +270,10 @@ let%expect_test "first, second and last" =
     [ { run = 0; coef = 1 }; { run = 0; coef = 2 }; { run = 61; coef = 3 } ]
   |> print;
   [%expect.unreachable]
-  [@@expect.uncaught_exn
-    {|
+[@@expect.uncaught_exn {|
   (* CR expect_test_collector: This test expectation appears to contain a backtrace.
      This is strongly discouraged as backtraces are fragile.
      Please change this test to not include a backtrace. *)
-
   (Mismatch
     (result
       (1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
@@ -279,15 +281,16 @@ let%expect_test "first, second and last" =
     (coefs
       (1 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
         0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3)))
-  Raised at Base__Error.raise in file "src/error.ml" (inlined), line 9, characters 14-30
-  Called from Base__Error.raise_s in file "src/error.ml", line 10, characters 19-40
-  Called from Hardcaml_jpeg_test__Test_run_length_encode.test in file "video-coding/jpeg/hardcaml/test/test_run_length_encode.ml", line 83, characters 55-71
-  Called from Hardcaml_jpeg_test__Test_run_length_encode.(fun) in file "video-coding/jpeg/hardcaml/test/test_run_length_encode.ml", line 263, characters 2-118
-  Called from Expect_test_collector.Make.Instance_io.exec in file "collector/expect_test_collector.ml", line 262, characters 12-19
+  Raised at Base__Error.raise in file "src/error.ml", line 9, characters 21-37
+  Called from Base__Error.raise_s in file "src/error.ml" (inlined), line 18, characters 35-47
+  Called from Hardcaml_jpeg_test__Test_run_length_encode.test in file "jpeg/hardcaml/test/test_run_length_encode.ml", line 83, characters 55-71
+  Called from Hardcaml_jpeg_test__Test_run_length_encode.(fun) in file "jpeg/hardcaml/test/test_run_length_encode.ml", lines 267-270, characters 2-118
+  Called from Ppx_expect_runtime__Test_block.Configured.dump_backtrace in file "runtime/test_block.ml", line 264, characters 10-25
 
   Trailing output
   ---------------
-  (results (((run 0) (coef 1)) ((run 62) (coef 3)))) |}]
+  (results (((run 0) (coef 1)) ((run 62) (coef 3))))
+  |}]
 ;;
 
 let%expect_test "first and last two" =

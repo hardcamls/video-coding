@@ -1,8 +1,8 @@
 (* This is the interesting marker code. 
-   
+
   Decoding the bits is relatively straight forward, but then they need to be 
   decoded into huffman codewords.
-  
+
   I think many hardware decoders just use the pre-defined code tables, but I 
   am kinda interested in seeing how we might support the more general case.
 *)
@@ -31,7 +31,7 @@ let test ?(verbose = false) ~start_cycle nth_marker =
     then (
       let code =
         Hardcaml_jpeg.Markers.Dht.Code.map outputs.fields.code ~f:(fun d ->
-            Bits.to_int !d)
+          Bits.to_int_trunc !d)
       in
       if code.num_codes_at_length <> 0
       then print_s [%message (code : int Hardcaml_jpeg.Markers.Dht.Code.t)]);
@@ -39,7 +39,7 @@ let test ?(verbose = false) ~start_cycle nth_marker =
     then (
       let data =
         Hardcaml_jpeg.Markers.Dht.Code_data.map outputs.fields.code_data ~f:(fun d ->
-            Bits.to_int !d)
+          Bits.to_int_trunc !d)
       in
       print_s [%message (data : int Hardcaml_jpeg.Markers.Dht.Code_data.t)])
   in

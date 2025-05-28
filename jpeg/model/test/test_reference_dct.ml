@@ -1,5 +1,5 @@
 (* Compare 3 different implementations of the forward and inverse DCT transforms. 
-   
+
   The first is a basic matrix based 8x8 floating point transform (of type II and III) 
   as you can find defined on wikipedia or other sources.
 
@@ -9,19 +9,22 @@
   The last is a classic Chen DCT implementation suitable for software implementations.
 *)
 
+(* XXX there is some other difference than randomness that changes this test - I wonder whats going on? *)
+let () = Random4.set_state (Random4.State.make [| 111; 222; 333 |])
+
 open Core
 open Hardcaml_jpeg_model.Dct
 
 let dump_float t =
   Matrix8x8.iteri t ~f:(fun ~row:_ ~col v ->
-      printf "%+.1f " v;
-      if col = 7 then printf "\n")
+    printf "%+.1f " v;
+    if col = 7 then printf "\n")
 ;;
 
 let dump_int t =
   Matrix8x8.iteri t ~f:(fun ~row:_ ~col v ->
-      printf "%+.4i " v;
-      if col = 7 then printf "\n")
+    printf "%+.4i " v;
+    if col = 7 then printf "\n")
 ;;
 
 let%expect_test "transform matrices are orthogonal" =
@@ -45,15 +48,15 @@ let%expect_test "transform matrices are orthogonal" =
 ;;
 
 (* Input reference data for testing *)
-let refdata = Array.init 8 ~f:(fun _ -> Array.init 8 ~f:(fun _ -> Random.int 100 - 50))
+let refdata = Array.init 8 ~f:(fun _ -> Array.init 8 ~f:(fun _ -> Random4.int 100 - 50))
 
 let forward_chen t =
   let o = Array.to_list t |> Array.concat in
   Hardcaml_jpeg_model.Dct.Chen.forward_8x8 o;
   (* The Chen transform is scaled by 4. *)
   Matrix8x8.init (fun ~row ~col ->
-      let x = o.((row * 8) + col) in
-      if x > 0 then (x + 2) / 4 else (x - 2) / 4)
+    let x = o.((row * 8) + col) in
+    if x > 0 then (x + 2) / 4 else (x - 2) / 4)
 ;;
 
 let inverse_chen t =
@@ -74,6 +77,7 @@ let inverse_ref t =
 ;;
 
 let diff = Matrix8x8.map2 ~f:(fun a b -> Int.abs (a - b))
+let () = Random4.set_state (Random4.State.make [| 111; 222; 333 |])
 
 let%expect_test "compare forward chen and reference transforms" =
   let chen = forward_chen refdata in

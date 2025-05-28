@@ -35,7 +35,7 @@ let size (type a) (module Comb : Comb.S with type t = a) (v : a) : a =
   let open Comb in
   let v = mux2 (msb v) (negate v) v in
   let clz = leading_zeros v in
-  of_int ~width:(width clz) (width v) -: clz
+  of_int_trunc ~width:(width clz) (width v) -: clz
 ;;
 
 let mag (type a) (module Comb : Comb.S with type t = a) (size : a) (v : a) : a =
@@ -43,7 +43,7 @@ let mag (type a) (module Comb : Comb.S with type t = a) (size : a) (v : a) : a =
   let w = width v in
   let sign = msb v in
   let v = mux2 sign (v -:. 1) v in
-  let mask = mux size (List.init w ~f:(fun i -> of_int ~width:w ((1 lsl i) - 1))) in
+  let mask = mux size (List.init w ~f:(fun i -> of_int_trunc ~width:w ((1 lsl i) - 1))) in
   v &: mask
 ;;
 
@@ -60,7 +60,7 @@ module Tables = struct
 
   let create_codes select codes =
     Array.map codes ~f:(fun { Tables.length; bits; data = _ } ->
-        Code.Of_signal.of_ints { Code.code = bits; bits = length })
+      Code.Of_signal.of_ints_trunc { Code.code = bits; bits = length })
     |> Array.to_list
     |> Code.Of_signal.mux select
   ;;
@@ -113,7 +113,7 @@ let create scope (i : _ I.t) =
           ]
       ]);
   { O.num_bits = mux2 (sm.is Code) (mux2 i.rle_in.valid code_bits (zero 5)) (ue size)
-  ; bits = mux2 (sm.is Code) code_value (uresize mag 16)
+  ; bits = mux2 (sm.is Code) code_value (uresize mag ~width:16)
   }
 ;;
 

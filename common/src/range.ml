@@ -13,7 +13,7 @@ let arg_type =
         | [ start ] -> { start = Int.of_string start; end_ = Int.of_string start }
         | [ ""; end_ ] -> { start = 0; end_ = Int.of_string end_ }
         | [ start; end_ ] -> { start = Int.of_string start; end_ = Int.of_string end_ }
-        | _ -> raise Caml.Not_found
+        | _ -> failwith ""
       with
       | _ -> raise_s [%message "Invalid frame size specified" (s : string)])
 ;;

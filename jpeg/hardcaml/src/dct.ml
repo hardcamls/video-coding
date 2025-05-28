@@ -78,7 +78,7 @@ module Make (Config : Config) = struct
       Float.(f * (2. ** Float.of_int rom_prec) |> Float.round_nearest |> Float.to_int)
     in
     transform_matrix
-    |> Matrix8x8.map ~f:(fun x -> Signal.of_int ~width:rom_prec (rnd x))
+    |> Matrix8x8.map ~f:(fun x -> Signal.of_signed_int ~width:rom_prec (rnd x))
     |> Array.map ~f:(fun d -> mux col (Array.to_list d))
     |> Array.to_list
     |> mux row
@@ -106,14 +106,17 @@ module Make (Config : Config) = struct
     in
     let mul =
       let coef =
-        mux2 (reg pass.value) i.transpose_coef_in (sresize i.coef_in transpose_bits)
+        mux2
+          (reg pass.value)
+          i.transpose_coef_in
+          (sresize i.coef_in ~width:transpose_bits)
       in
       reg (coef *+ dct_coef) -- "dct_mul"
     in
     let mac =
       reg_fb (Clocking.to_spec i.clocking) ~enable:vdd ~width:mac_bits ~f:(fun d ->
-          let mul = sresize mul mac_bits in
-          mux2 (pipeline ~n:2 z.value ==:. 0) mul (d +: mul))
+        let mul = sresize mul ~width:mac_bits in
+        mux2 (pipeline ~n:2 z.value ==:. 0) mul (d +: mul))
       -- "dct_mac"
     in
     let module Fixed = Hardcaml_fixed_point.Signed (Signal) in

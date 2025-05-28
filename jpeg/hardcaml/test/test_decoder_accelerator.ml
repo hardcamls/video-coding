@@ -43,12 +43,12 @@ let get_headers_and_model_and_bits jpeg =
   headers, model, get_entropy_coded_segment bits
 ;;
 
-let ( <--. ) a b = a := Bits.of_int ~width:(Bits.width !a) b
+let ( <--. ) a b = a := Bits.of_int_trunc ~width:(Bits.width !a) b
 
 let max_reconstructed_diff pixels recon =
   Array.fold2_exn pixels recon ~init:0 ~f:(fun acc a b ->
-      let diff = Int.abs (a - b) in
-      if diff < acc then acc else diff)
+    let diff = Int.abs (a - b) in
+    if diff < acc then acc else diff)
 ;;
 
 let test ?(waves = true) ?(error_tolerance = 2) ?num_blocks_to_decode jpeg =
@@ -91,7 +91,7 @@ let test ?(waves = true) ?(error_tolerance = 2) ?num_blocks_to_decode jpeg =
       try Char.to_int data.[(!pos * 2) + 1] with
       | _ -> 0
     in
-    Bits.of_int ~width:16 ((d0 lsl 8) lor d1)
+    Bits.of_int_trunc ~width:16 ((d0 lsl 8) lor d1)
   in
   inputs.jpeg := get_data ();
   Int.incr pos;
@@ -104,7 +104,7 @@ let test ?(waves = true) ?(error_tolerance = 2) ?num_blocks_to_decode jpeg =
   in
   let upload_pixels () =
     let pixels = ref [] in
-    let add_pixel () = pixels := Bits.to_int !(outputs.pixel) :: !pixels in
+    let add_pixel () = pixels := Bits.to_int_trunc !(outputs.pixel) :: !pixels in
     inputs.pixel_read_enable := Bits.vdd;
     for i = 0 to 63 do
       inputs.pixel_read_address <--. i;
@@ -135,9 +135,9 @@ let test ?(waves = true) ?(error_tolerance = 2) ?num_blocks_to_decode jpeg =
     let subblock = block % 6 in
     inputs.start_codeblock_decoder := Bits.vdd;
     inputs.start_idct := Bits.vdd;
-    inputs.ac_table_select := Bits.of_int ~width:2 (if subblock >= 4 then 1 else 0);
-    inputs.dc_table_select := Bits.of_int ~width:2 (if subblock >= 4 then 1 else 0);
-    inputs.qnt_table_select := Bits.of_int ~width:2 (if subblock >= 4 then 1 else 0);
+    inputs.ac_table_select := Bits.of_int_trunc ~width:2 (if subblock >= 4 then 1 else 0);
+    inputs.dc_table_select := Bits.of_int_trunc ~width:2 (if subblock >= 4 then 1 else 0);
+    inputs.qnt_table_select := Bits.of_int_trunc ~width:2 (if subblock >= 4 then 1 else 0);
     inputs.dc_pred_in <--. get_dc_pred block;
     cycle ();
     inputs.start_codeblock_decoder := Bits.gnd;
@@ -147,7 +147,7 @@ let test ?(waves = true) ?(error_tolerance = 2) ?num_blocks_to_decode jpeg =
     while not (Bits.to_bool !(outputs.done_)) do
       cycle ()
     done;
-    let dc_pred_out = Bits.to_int !(outputs.dc_pred_out) in
+    let dc_pred_out = Bits.to_int_trunc !(outputs.dc_pred_out) in
     set_dc_pred block dc_pred_out;
     pixels
   in
@@ -160,24 +160,24 @@ let test ?(waves = true) ?(error_tolerance = 2) ?num_blocks_to_decode jpeg =
       (* finish early *) ()
     | Some _ | None ->
       (match Sequence.hd model with
-      | None -> () (* finished decoding *)
-      | Some comp ->
-        (* Run simulator *)
-        let pixels = run_one_block (block_number + 2) in
-        (* print_s [%message (pixels : Int.Hex.t array)]; *)
-        Util.reconstruct ~block_number frame pixels;
-        let max_reconstructed_diff =
-          max_reconstructed_diff pixels (Decoder.Component.recon comp)
-        in
-        if max_reconstructed_diff >= error_tolerance
-        then
-          print_s
-            [%message
-              (block_number : int)
-                (max_reconstructed_diff : int)
-                (pixels : Sexp_util.pixel_block)
-                (comp : Decoder.Component.Summary.t)];
-        decode_and_compare_with_model (Sequence.tl_eagerly_exn model) (block_number + 1))
+       | None -> () (* finished decoding *)
+       | Some comp ->
+         (* Run simulator *)
+         let pixels = run_one_block (block_number + 2) in
+         (* print_s [%message (pixels : Int.Hex.t array)]; *)
+         Util.reconstruct ~block_number frame pixels;
+         let max_reconstructed_diff =
+           max_reconstructed_diff pixels (Decoder.Component.recon comp)
+         in
+         if max_reconstructed_diff >= error_tolerance
+         then
+           print_s
+             [%message
+               (block_number : int)
+                 (max_reconstructed_diff : int)
+                 (pixels : Sexp_util.pixel_block)
+                 (comp : Decoder.Component.Summary.t)];
+         decode_and_compare_with_model (Sequence.tl_eagerly_exn model) (block_number + 1))
   in
   try
     decode_and_compare_with_model model 0;

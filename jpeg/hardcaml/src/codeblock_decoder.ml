@@ -71,10 +71,12 @@ module Decode_magnitude (Bits : Comb.S) = struct
     let sign = msb code in
     let code =
       List.init 12 ~f:(fun cat ->
-          if cat = 0 then zero 12 else uresize code.:-[None, cat] 12)
+        if cat = 0 then zero 12 else uresize code.:-[None, cat] ~width:12)
       |> mux cat
     in
-    let sign_bits = List.init 12 ~f:(fun i -> of_int ~width:12 (-1 lsl i)) |> mux cat in
+    let sign_bits =
+      List.init 12 ~f:(fun i -> of_int_trunc ~width:12 (-1 lsl i)) |> mux cat
+    in
     mux2 sign (code &: ~:sign_bits) ((code |: sign_bits) +:. 1)
   ;;
 end
@@ -83,7 +85,11 @@ include Decode_magnitude (Signal)
 
 let codeword_decoder ~name ~acdc ~id scope (i : _ I.t) =
   let ( -- ) = Scope.naming scope in
-  let ( -- ) s n = s -- (name ^ "dec$" ^ n) in
+  let ( -- ) ~(loc : [%call_pos]) s n =
+    (* XXX whats going on with loc? *)
+    ignore loc;
+    s -- (name ^ "dec$" ^ n)
+  in
   let module T = struct
     type t =
       { data_ram_depth : int
@@ -133,7 +139,7 @@ let codeword_decoder ~name ~acdc ~id scope (i : _ I.t) =
         }
       ~read_address:
         (code.decoded.data_address.:+[0, Some table_spec.data_ram_address_bits]
-        -- "code_read_address")
+         -- "code_read_address")
   in
   Decoded_code.Of_signal.apply_names
     ~naming_op:( -- )
@@ -144,12 +150,12 @@ let create scope (i : _ I.t) =
   let ( -- ) = Scope.naming scope in
   let dc =
     List.init 2 ~f:(fun id ->
-        codeword_decoder ~name:[%string "dc%{id#Int}"] ~acdc:`dc ~id scope i)
+      codeword_decoder ~name:[%string "dc%{id#Int}"] ~acdc:`dc ~id scope i)
     |> Decoded_code.Of_signal.mux i.table_id
   in
   let ac =
     List.init 2 ~f:(fun id ->
-        codeword_decoder ~name:[%string "ac%{id#Int}"] ~acdc:`ac ~id scope i)
+      codeword_decoder ~name:[%string "ac%{id#Int}"] ~acdc:`ac ~id scope i)
     |> Decoded_code.Of_signal.mux i.table_id
   in
   let ac_run = ac.data.:[7, 4] -- "ac_run" in
@@ -174,7 +180,7 @@ let create scope (i : _ I.t) =
               ; when_
                   i.start
                   [ (* clear error signals *)
-                    Errors.Of_always.assign errors (Errors.Of_signal.of_int 0)
+                    Errors.Of_always.assign errors (Errors.Of_signal.of_unsigned_int 0)
                   ; sm.set_next Dc
                   ]
               ] )
@@ -191,12 +197,12 @@ let create scope (i : _ I.t) =
           ; ( Ac
             , [ when_
                   i.bits_valid
-                  [ run <-- uresize ac_run 7
+                  [ run <-- uresize ac_run ~width:7
                   ; size <-- ac.data.:[3, 0]
                   ; sm.set_next Ac_size
                   ; when_
                       ac_run_and_size_is_zero
-                      [ run <-- of_int ~width:7 63 -: coef_count.value
+                      [ run <-- of_unsigned_int ~width:7 63 -: coef_count.value
                       ; sm.set_next Ac_size
                       ]
                   ; on_error ~:(ac.matches) errors.ac_coef_decode
@@ -229,7 +235,7 @@ let create scope (i : _ I.t) =
         ~default:(zero 5)
         [ { valid = sm.is Dc &: i.bits_valid; value = dc.bits }
         ; { valid = sm.is Dc_size |: (sm.is Ac_size &: run_is_zero) &: i.bits_valid
-          ; value = uresize size.value 5
+          ; value = uresize size.value ~width:5
           }
         ; { valid = sm.is Ac &: i.bits_valid; value = ac.bits }
         ]

@@ -9,10 +9,10 @@ let%expect_test "insert at bottom" =
   let buffer = ref (Bits.zero 32) in
   let insert ~data_in ~bits =
     buffer
-      := T.insert_at_bottom
-           ~buffer:!buffer
-           ~data_in:(Bits.of_int ~width:16 data_in)
-           ~bits:(Bits.of_int ~width:5 bits);
+    := T.insert_at_bottom
+         ~buffer:!buffer
+         ~data_in:(Bits.of_int_trunc ~width:16 data_in)
+         ~bits:(Bits.of_int_trunc ~width:5 bits);
     count := !count + bits
   in
   insert ~data_in:0xff ~bits:8;
@@ -51,8 +51,8 @@ let create_sim () =
 let create_sim_with_put () =
   let sim, waves, inputs, _ = create_sim () in
   let put num bits =
-    inputs.bits := Bits.of_int ~width:16 bits;
-    inputs.num_bits := Bits.of_int ~width:5 num;
+    inputs.bits := Bits.of_int_trunc ~width:16 bits;
+    inputs.num_bits := Bits.of_int_trunc ~width:5 num;
     Cyclesim.cycle sim
   in
   sim, waves, put
@@ -147,17 +147,19 @@ let random_test len =
     let nbits = Random.int (1 + min 16 (Bits.width !bits_in_shift)) in
     if nbits <> 0
     then (
-      inputs.bits := Bits.uresize (Bits.sel_top !bits_in_shift nbits) 16;
+      inputs.bits := Bits.uresize (Bits.sel_top !bits_in_shift ~width:nbits) ~width:16;
       bits_in_shift
-        := if width_left = nbits then Bits.empty else Bits.drop_top !bits_in_shift nbits);
-    inputs.num_bits := Bits.of_int ~width:5 nbits;
+      := if width_left = nbits
+         then Bits.empty
+         else Bits.drop_top !bits_in_shift ~width:nbits);
+    inputs.num_bits := Bits.of_int_trunc ~width:5 nbits;
     cycle ()
   done;
   (* flush output *)
   let rounded_width = Int.round_up ~to_multiple_of:16 len in
   let bits_left = rounded_width - len in
   inputs.bits := Bits.zero 16;
-  inputs.num_bits := Bits.of_int ~width:5 bits_left;
+  inputs.num_bits := Bits.of_int_trunc ~width:5 bits_left;
   cycle ();
   cycle ();
   cycle ();
@@ -168,7 +170,7 @@ let random_test len =
     raise_s
       [%message
         "output not expected length" (rounded_width : int) (Bits.width bits_out : int)];
-  let bits_out = Bits.sel_top bits_out len in
+  let bits_out = Bits.sel_top bits_out ~width:len in
   if not (Bits.equal bits_in bits_out)
   then raise_s [%message "mismatch" (bits_in : Bits.t) (bits_out : Bits.t)]
 ;;
@@ -177,10 +179,10 @@ let%expect_test "small tests" =
   for _ = 1 to 100 do
     random_test 100
   done;
-  [%expect{||}]
+  [%expect {||}]
 ;;
 
 let%expect_test "big test" =
   random_test 10_000;
-  [%expect{||}]
+  [%expect {||}]
 ;;

@@ -16,12 +16,12 @@ include struct
   module Sexp_util = Util
 end
 
-let ( <--. ) a b = a := Bits.of_int ~width:(Bits.width !a) b
+let ( <--. ) a b = a := Bits.of_int_trunc ~width:(Bits.width !a) b
 
 let max_reconstructed_diff pixels recon =
   Array.fold2_exn pixels recon ~init:0 ~f:(fun acc a b ->
-      let diff = Int.abs (a - b) in
-      if diff < acc then acc else diff)
+    let diff = Int.abs (a - b) in
+    if diff < acc then acc else diff)
 ;;
 
 let test ?(waves = true) ?(error_tolerance = 2) ?num_blocks_to_decode jpeg =
@@ -68,13 +68,13 @@ let test ?(waves = true) ?(error_tolerance = 2) ?num_blocks_to_decode jpeg =
       then (
         (inputs.jpeg_valid := Bits.vdd;
          inputs.jpeg
-           := try Bits.of_char bits.[!jpeg_pos] with
-              | _ -> Bits.zero 8);
+         := try Bits.of_char bits.[!jpeg_pos] with
+            | _ -> Bits.zero 8);
         Int.incr jpeg_pos);
       Int.incr num_cycles
     in
     let pixels = ref [] in
-    let add_pixel () = pixels := Bits.to_int !(outputs.pixel) :: !pixels in
+    let add_pixel () = pixels := Bits.to_int_trunc !(outputs.pixel) :: !pixels in
     while not (Bits.to_bool !(outputs.start_output)) do
       cycle ()
     done;
@@ -98,23 +98,23 @@ let test ?(waves = true) ?(error_tolerance = 2) ?num_blocks_to_decode jpeg =
       (* finish early *) ()
     | Some _ | None ->
       (match Sequence.hd model with
-      | None -> () (* finished decoding *)
-      | Some comp ->
-        (* Run simulator *)
-        let pixels = output_a_block () in
-        Util.reconstruct ~block_number frame pixels;
-        let max_reconstructed_diff =
-          max_reconstructed_diff pixels (Model.Component.recon comp)
-        in
-        if max_reconstructed_diff >= error_tolerance
-        then
-          print_s
-            [%message
-              (block_number : int)
-                (max_reconstructed_diff : int)
-                (pixels : Sexp_util.pixel_block)
-                (comp : Model.Component.Summary.t)];
-        decode_and_compare_with_model (Sequence.tl_eagerly_exn model) (block_number + 1))
+       | None -> () (* finished decoding *)
+       | Some comp ->
+         (* Run simulator *)
+         let pixels = output_a_block () in
+         Util.reconstruct ~block_number frame pixels;
+         let max_reconstructed_diff =
+           max_reconstructed_diff pixels (Model.Component.recon comp)
+         in
+         if max_reconstructed_diff >= error_tolerance
+         then
+           print_s
+             [%message
+               (block_number : int)
+                 (max_reconstructed_diff : int)
+                 (pixels : Sexp_util.pixel_block)
+                 (comp : Model.Component.Summary.t)];
+         decode_and_compare_with_model (Sequence.tl_eagerly_exn model) (block_number + 1))
   in
   try
     decode_and_compare_with_model model 0;
@@ -164,7 +164,7 @@ let%expect_test "test decoder" =
     │start_output      ││                                                                                                  │
     │                  ││──────────────────────────────────────────────────────────────────────────────────────────────────│
     │                  ││──────────────────────────────────────────────────────────────────────────────────────────────────│
-    │bsread$STATE      ││ 0                                                                                                │
+    │bsread$STATE      ││ Start                                                                                            │
     │                  ││──────────────────────────────────────────────────────────────────────────────────────────────────│
     │                  ││──────────────────────────────────────────────────────────────────────────────────────────────────│
     │bsread$buffer     ││ 0000000000                                                                                       │
@@ -186,5 +186,6 @@ let%expect_test "test decoder" =
     │                  ││──────────────────────────────────────────────────────────────────────────────────────────────────│
     │bsread$i$start    ││                                                                                                  │
     │                  ││──────────────────────────────────────────────────────────────────────────────────────────────────│
-    └──────────────────┘└──────────────────────────────────────────────────────────────────────────────────────────────────┘ |}]
+    └──────────────────┘└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+    |}]
 ;;

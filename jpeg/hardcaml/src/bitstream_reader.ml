@@ -3,7 +3,7 @@ open Hardcaml
 open Signal
 
 (* We have the following requirements for this module. 
-   
+
    1. Roughly 16 bits per cycle IO - this is needed to keep up with the variable length
       decoding process.  At input we'll take a 16 bit AXI-stream like interface.
    2. Two modes of operation - header parsing and entropy parsing. 
@@ -30,10 +30,9 @@ module I = struct
     { clocking : 'a Clocking.t
     ; start : 'a
     ; read_bits : 'a [@bits 5]
-          (** Advance the bitstream by 0 to 16 bits. Values > 16 lead to undefined
-              behaviour.*)
+    (** Advance the bitstream by 0 to 16 bits. Values > 16 lead to undefined behaviour. *)
     ; jpeg_in : 'a [@bits 16]
-          (** 32 bits of data from the bitstream provided to the reader. *)
+    (** 32 bits of data from the bitstream provided to the reader. *)
     ; jpeg_valid : 'a (** The next 16 bits of input bitstream are available *)
     }
   [@@deriving sexp_of, hardcaml]
@@ -41,7 +40,7 @@ end
 
 module O = struct
   type 'a t =
-    { bits : 'a [@bits 16] (** The next 16 bits of the bitstream*)
+    { bits : 'a [@bits 16] (** The next 16 bits of the bitstream *)
     ; bits_valid : 'a (** [bits] has 16 bits of data available *)
     ; jpeg_ready : 'a (** Core reads the next 16 bits in *)
     }
@@ -80,7 +79,9 @@ let create scope (i : _ I.t) =
   let shift_offset = Clocking.Var.reg i.clocking ~width:3 in
   vname shift_offset "shift_offset";
   let shift_offset_next = reg_with_next i.clocking ~name:"shift_offset_next" ~width:5 in
-  let bits = log_shift sll (sel_top buffer.reg.value 24) shift_offset.value in
+  let bits =
+    log_shift ~f:sll (sel_top buffer.reg.value ~width:24) ~by:shift_offset.value
+  in
   let one_byte_shifted = reg_with_next i.clocking ~name:"one_byte_shifted" ~width:1 in
   let read = Var.wire ~default:gnd in
   let jpeg_ready = Var.wire ~default:gnd in
@@ -91,7 +92,7 @@ let create scope (i : _ I.t) =
   Always.(
     compile
       [ (* combinationally work out the next shift register state *)
-        shift_offset_next.next <-- uresize shift_offset.value 5 +: i.read_bits
+        shift_offset_next.next <-- uresize shift_offset.value ~width:5 +: i.read_bits
       ; if_
           shift_offset_next.next.value.:(4)
           [ (* >= 16 *)
@@ -99,9 +100,11 @@ let create scope (i : _ I.t) =
           ; if_
               one_byte_shifted.reg.value
               [ buffer.next
-                <-- drop_bottom (drop_top buffer.reg.value 16) 8 @: i.jpeg_in @: zero 8
+                <-- drop_bottom (drop_top buffer.reg.value ~width:16) ~width:8
+                    @: i.jpeg_in
+                    @: zero 8
               ]
-              [ buffer.next <-- drop_top buffer.reg.value 16 @: i.jpeg_in ]
+              [ buffer.next <-- drop_top buffer.reg.value ~width:16 @: i.jpeg_in ]
           ]
         @@ elif
              shift_offset_next.next.value.:(3)
@@ -109,11 +112,12 @@ let create scope (i : _ I.t) =
                if_
                  one_byte_shifted.reg.value
                  [ buffer.next
-                   <-- drop_bottom (drop_top buffer.reg.value 8) 8 @: i.jpeg_in
+                   <-- drop_bottom (drop_top buffer.reg.value ~width:8) ~width:8
+                       @: i.jpeg_in
                  ; one_byte_shifted.next <-- gnd
                  ; read <-- vdd
                  ]
-                 [ buffer.next <-- drop_top buffer.reg.value 8 @: zero 8
+                 [ buffer.next <-- drop_top buffer.reg.value ~width:8 @: zero 8
                  ; one_byte_shifted.next <-- vdd
                  ]
              ]
@@ -132,7 +136,7 @@ let create scope (i : _ I.t) =
                   i.jpeg_valid
                   [ sync_count <-- sync_count.value +:. 1
                   ; buffer.reg
-                    <-- drop_bottom (drop_top buffer.reg.value 16) 8
+                    <-- drop_bottom (drop_top buffer.reg.value ~width:16) ~width:8
                         @: i.jpeg_in
                         @: zero 8
                   ; when_ (sync_count.value ==:. 1) [ sm.set_next Pass ]
@@ -168,7 +172,7 @@ let create scope (i : _ I.t) =
           ; shift_offset <-- shift_offset_next.next.value.:[2, 0]
           ]
       ]);
-  { O.bits = sel_top bits 16
+  { O.bits = sel_top bits ~width:16
   ; bits_valid = bits_valid.value
   ; jpeg_ready = jpeg_ready.value
   }

@@ -1,7 +1,7 @@
 (** Simple Fixde point IDCT implementation.contents
-  
-    Currently takes 1024 cycles per 8x8 block (it implements 2 8x8 matrix multiplies with a single multiplier.)
-*)
+
+    Currently takes 1024 cycles per 8x8 block (it implements 2 8x8 matrix multiplies with
+    a single multiplier.) *)
 
 open! Base
 open Hardcaml
@@ -17,7 +17,7 @@ end
 module Dct_config : Config
 module Idct_config : Config
 
-module Make (Config : Config) : sig
+module Make (_ : Config) : sig
   val transpose_bits : int
 
   module I : sig

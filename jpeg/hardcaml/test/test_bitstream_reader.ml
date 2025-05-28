@@ -20,7 +20,7 @@ let test () =
   inputs.start := Bits.gnd;
   let pos = ref 0 in
   let set_jpeg_in pos =
-    inputs.jpeg_in := Bits.of_int ~width:16 (0x1234 + (0x4444 * !pos));
+    inputs.jpeg_in := Bits.of_int_trunc ~width:16 (0x1234 + (0x4444 * !pos));
     Int.incr pos
   in
   let cycle () =
@@ -32,15 +32,15 @@ let test () =
   while not (Bits.to_bool !(outputs.bits_valid)) do
     cycle ()
   done;
-  inputs.read_bits := Bits.of_int ~width:5 16;
+  inputs.read_bits := Bits.of_int_trunc ~width:5 16;
   cycle ();
-  inputs.read_bits := Bits.of_int ~width:5 8;
+  inputs.read_bits := Bits.of_int_trunc ~width:5 8;
   cycle ();
-  inputs.read_bits := Bits.of_int ~width:5 16;
+  inputs.read_bits := Bits.of_int_trunc ~width:5 16;
   cycle ();
-  inputs.read_bits := Bits.of_int ~width:5 8;
+  inputs.read_bits := Bits.of_int_trunc ~width:5 8;
   cycle ();
-  inputs.read_bits := Bits.of_int ~width:5 16;
+  inputs.read_bits := Bits.of_int_trunc ~width:5 16;
   cycle ();
   waves
 ;;
@@ -73,7 +73,7 @@ let%expect_test "buffer" =
     │jpeg_ready        ││────────────────────────────────┐       ┌───────                                                  │
     │                  ││                                └───────┘                                                         │
     │                  ││────────┬───────────────────────────────────────                                                  │
-    │STATE             ││ 1      │2                                                                                        │
+    │STATE             ││ Sync   │Pass                                                                                     │
     │                  ││────────┴───────────────────────────────────────                                                  │
     │                  ││────────┬───────┬───────┬───────┬───────┬───────                                                  │
     │buffer            ││ 000012.│123456.│56789A.│789ABC.│BCDF00.│DF0023.                                                  │
@@ -89,7 +89,8 @@ let%expect_test "buffer" =
     │                  ││                └───────────────┘                                                                 │
     │                  ││────────────────────────────────────────────────                                                  │
     │shift_offset      ││ 0                                                                                                │
-    └──────────────────┘└──────────────────────────────────────────────────────────────────────────────────────────────────┘ |}]
+    └──────────────────┘└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+    |}]
 ;;
 
 let test ?(waves = false) data bits =
@@ -115,10 +116,10 @@ let test ?(waves = false) data bits =
   let pos = ref 0 in
   let set_jpeg_in pos =
     inputs.jpeg_in
-      := Bits.of_int
-           ~width:16
-           (try data.(!pos) with
-           | _ -> 0);
+    := Bits.of_int_trunc
+         ~width:16
+         (try data.(!pos) with
+          | _ -> 0);
     Int.incr pos
   in
   let cycle () =
@@ -133,13 +134,13 @@ let test ?(waves = false) data bits =
     Hardcaml_video_common.Bitstream_reader.From_string.create
       (String.of_char_list
          (List.init (Array.length data) ~f:(fun i ->
-              [ Char.of_int_exn (data.(i) lsr 8); Char.of_int_exn (data.(i) land 0xff) ])
-         |> List.concat))
+            [ Char.of_int_exn (data.(i) lsr 8); Char.of_int_exn (data.(i) land 0xff) ])
+          |> List.concat))
   in
   let check bits =
     if bits <> 0
     then (
-      let obits = Bits.to_int !(outputs_before.bits) in
+      let obits = Bits.to_int_trunc !(outputs_before.bits) in
       let hbits = obits lsr (16 - bits) in
       let cbits = Hardcaml_video_common.Bitstream_reader.From_string.get cbits bits in
       if hbits <> cbits
@@ -149,9 +150,9 @@ let test ?(waves = false) data bits =
             (bits : int) (cbits : Int.Hex.t) (obits : Int.Hex.t) (hbits : Int.Hex.t)])
   in
   Array.iter bits ~f:(fun bits ->
-      inputs.read_bits := Bits.of_int ~width:5 bits;
-      cycle ();
-      check bits);
+    inputs.read_bits := Bits.of_int_trunc ~width:5 bits;
+    cycle ();
+    check bits);
   waves
 ;;
 
@@ -187,7 +188,7 @@ let%expect_test "..." =
     │jpeg_ready        ││            ┌───────────┐           ┌───────────┐                 ┌─────                          │
     │                  ││────────────┘           └───────────┘           └─────────────────┘                               │
     │                  ││────────────┬───────────┬───────────────────────────────────────────────                          │
-    │STATE             ││ 0          │1          │2                                                                        │
+    │STATE             ││ Start      │Sync       │Pass                                                                     │
     │                  ││────────────┴───────────┴───────────────────────────────────────────────                          │
     │                  ││──────────────────┬─────┬─────────────────┬─────┬─────┬─────────────────                          │
     │buffer            ││ 0000000000       │0000.│0123456700       │2345.│6789.│89ABCDEF00                                 │
@@ -203,7 +204,8 @@ let%expect_test "..." =
     │                  ││────────────┘                       └───────────┘                                                 │
     │                  ││──────────────────────────────┬─────┬─────┬─────┬─────┬─────┬─────┬─────                          │
     │shift_offset      ││ 0                            │2    │5    │4    │0    │5    │6    │7                              │
-    └──────────────────┘└──────────────────────────────────────────────────────────────────────────────────────────────────┘ |}]
+    └──────────────────┘└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+    |}]
 ;;
 
 let%expect_test "..." =

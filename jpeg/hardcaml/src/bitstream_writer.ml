@@ -22,8 +22,8 @@ module Make (Comb : Comb.S) = struct
   open Comb
 
   let insert_at_bottom ~buffer ~data_in ~bits =
-    let buffer = log_shift sll buffer bits in
-    buffer |: uresize data_in (width buffer)
+    let buffer = log_shift ~f:sll buffer ~by:bits in
+    buffer |: uresize data_in ~width:(width buffer)
   ;;
 end
 
@@ -44,7 +44,7 @@ let create scope (i : _ I.t) =
   let count_next = Uop.(count.value +: i.num_bits) in
   let bits_valid = count.value >=:. 16 in
   let output_shift =
-    uresize (ue count.value -:. 16) (num_bits_to_represent max_output_shift)
+    uresize (ue count.value -:. 16) ~width:(num_bits_to_represent max_output_shift)
   in
   Always.(
     compile
@@ -56,7 +56,7 @@ let create scope (i : _ I.t) =
             <-- insert_at_bottom ~buffer:buffer.value ~data_in:i.bits ~bits:i.num_bits
           ]
       ]);
-  { O.bits_out = (log_shift srl buffer.value output_shift).:[15, 0]; bits_valid }
+  { O.bits_out = (log_shift ~f:srl buffer.value ~by:output_shift).:[15, 0]; bits_valid }
 ;;
 
 let hierarchical scope =

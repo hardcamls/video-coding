@@ -41,14 +41,14 @@ end
 module Dct = Dct.Make (Dct.Dct_config)
 
 let dct_with_rams
-    ~scope
-    ~(clocking : _ Clocking.t)
-    ~start_dct
-    ~start_vlc
-    ~pixel
-    ~pixel_write_address
-    ~pixel_write_enable
-    ~(coef_read_port : read_port)
+  ~scope
+  ~(clocking : _ Clocking.t)
+  ~start_dct
+  ~start_vlc
+  ~pixel
+  ~pixel_write_address
+  ~pixel_write_enable
+  ~(coef_read_port : _ Read_port.t)
   =
   let ( -- ) = Scope.naming scope in
   let toggle =

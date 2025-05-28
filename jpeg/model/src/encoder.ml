@@ -1,7 +1,7 @@
 open! Base
 open Hardcaml_video_common
 
-(* 
+(*
    - Level shift
    - FDCT
    - Quantize
@@ -9,7 +9,6 @@ open Hardcaml_video_common
    - Zigzag
    - Run-length encode
    - Huffman encode
-   
 *)
 
 module Writer = Bitstream_writer
@@ -103,25 +102,25 @@ let quant_and_scale fdct qnt =
 let quant (block : Block.t) ~table =
   for i = 0 to 63 do
     block.quant.(Zigzag.forward.(i))
-      <- quant_and_scale block.fdct.(i) table.(Zigzag.forward.(i))
+    <- quant_and_scale block.fdct.(i) table.(Zigzag.forward.(i))
   done
 ;;
 
 let dequant (block : Block.t) ~table =
   Option.iter block.decoded ~f:(fun dec_block ->
-      for i = 0 to 63 do
-        let c = block.quant.(i) * table.(i) in
-        dec_block.dequant.(Zigzag.inverse.(i)) <- c;
-        dec_block.idct.(Zigzag.inverse.(i)) <- c
-      done)
+    for i = 0 to 63 do
+      let c = block.quant.(i) * table.(i) in
+      dec_block.dequant.(Zigzag.inverse.(i)) <- c;
+      dec_block.idct.(Zigzag.inverse.(i)) <- c
+    done)
 ;;
 
 let recon (block : Block.t) =
   Option.iter block.decoded ~f:(fun dec_block ->
-      for i = 0 to 63 do
-        dec_block.recon.(i) <- Int.max 0 (Int.min 255 (dec_block.idct.(i) + 128));
-        dec_block.error.(i) <- Int.abs (dec_block.recon.(i) - block.input_pixels.(i))
-      done)
+    for i = 0 to 63 do
+      dec_block.recon.(i) <- Int.max 0 (Int.min 255 (dec_block.idct.(i) + 128));
+      dec_block.error.(i) <- Int.abs (dec_block.recon.(i) - block.input_pixels.(i))
+    done)
 ;;
 
 let rle (block : Block.t) =
@@ -147,10 +146,10 @@ let magnitude ~size value =
 ;;
 
 let write_bits
-    (block : Block.t)
-    ~writer
-    ~(dc_table : Tables.dc_coef array)
-    ~(ac_table : Tables.ac_coef array array)
+  (block : Block.t)
+  ~writer
+  ~(dc_table : Tables.dc_coef array)
+  ~(ac_table : Tables.ac_coef array array)
   =
   let write_dc value =
     let size = size value in
@@ -210,10 +209,10 @@ let write_marker_code writer code =
 ;;
 
 let write_dht
-    writer
-    ~table_class
-    ~destination_identifier
-    ({ lengths; values } : Tables.Specification.t)
+  writer
+  ~table_class
+  ~destination_identifier
+  ({ lengths; values } : Tables.Specification.t)
   =
   write_marker_code writer Marker_code.dht;
   Markers.Dht.encode
@@ -369,43 +368,44 @@ module Parameters = struct
 end
 
 let write_headers
-    ~params:
-      { Parameters.width
-      ; height
-      ; quant_tables
-      ; dc_huffman_tables
-      ; ac_huffman_tables
-      ; scan_components
-      }
-    ~writer
+  ~params:
+    { Parameters.width
+    ; height
+    ; quant_tables
+    ; dc_huffman_tables
+    ; ac_huffman_tables
+    ; scan_components
+    }
+  ~writer
   =
   write_marker_code writer Marker_code.soi;
   write_app0 writer "Hardcaml JPEG.";
   Array.iter quant_tables ~f:(fun { identifier; data } ->
-      write_dqt writer ~table_identifier:identifier data);
+    write_dqt writer ~table_identifier:identifier data);
   write_sof
     writer
     ~width
     ~height
     (Array.map
        scan_components
-       ~f:(fun
-            { quant_table
-            ; component
-            ; horizontal_sampling_factor
-            ; vertical_sampling_factor
-            ; _
-            }
-          ->
+       ~f:
+         (fun
+           { quant_table
+           ; component
+           ; horizontal_sampling_factor
+           ; vertical_sampling_factor
+           ; _
+           }
+         ->
          { Markers.Component.identifier = component
          ; horizontal_sampling_factor
          ; vertical_sampling_factor
          ; quantization_table_identifier = quant_table
          }));
   Array.iter dc_huffman_tables ~f:(fun { identifier; data } ->
-      write_dht writer ~table_class:0 ~destination_identifier:identifier data);
+    write_dht writer ~table_class:0 ~destination_identifier:identifier data);
   Array.iter ac_huffman_tables ~f:(fun { identifier; data } ->
-      write_dht writer ~table_class:1 ~destination_identifier:identifier data);
+    write_dht writer ~table_class:1 ~destination_identifier:identifier data);
   write_sos
     writer
     (Array.map
@@ -428,8 +428,8 @@ type scan =
   }
 
 type t =
-  { params : Parameters.t
-  ; scans : scan array
+  { (* params : Parameters.t; *)
+    scans : scan array
   ; writer : Writer.t
   }
 [@@defiving fields]
@@ -443,32 +443,32 @@ let create ?(compute_reconstruction_error = false) ~(params : Parameters.t) ~wri
   in
   let max_hscale, max_vscale =
     ( Array.fold params.scan_components ~init:0 ~f:(fun acc c ->
-          max acc c.horizontal_sampling_factor)
+        max acc c.horizontal_sampling_factor)
     , Array.fold params.scan_components ~init:0 ~f:(fun acc c ->
-          max acc c.vertical_sampling_factor) )
+        max acc c.vertical_sampling_factor) )
   in
   let scans =
     Array.map params.scan_components ~f:(fun scan ->
-        let width = params.width * scan.horizontal_sampling_factor / max_hscale in
-        let height = params.height * scan.vertical_sampling_factor / max_vscale in
-        let width =
-          Int.round_up ~to_multiple_of:(8 * scan.horizontal_sampling_factor) width
-        in
-        let height =
-          Int.round_up ~to_multiple_of:(8 * scan.vertical_sampling_factor) height
-        in
-        { hscale = scan.horizontal_sampling_factor
-        ; vscale = scan.vertical_sampling_factor
-        ; block = Block.create compute_reconstruction_error
-        ; plane = Plane.create ~width ~height
-        ; quant_table = Identified.find "quant" scan.quant_table params.quant_tables
-        ; dc_huffman_table =
-            Identified.find "dc_huffman" scan.dc_huffman_table dc_huffman_tables
-        ; ac_huffman_table =
-            Identified.find "ac_huffman" scan.ac_huffman_table ac_huffman_tables
-        })
+      let width = params.width * scan.horizontal_sampling_factor / max_hscale in
+      let height = params.height * scan.vertical_sampling_factor / max_vscale in
+      let width =
+        Int.round_up ~to_multiple_of:(8 * scan.horizontal_sampling_factor) width
+      in
+      let height =
+        Int.round_up ~to_multiple_of:(8 * scan.vertical_sampling_factor) height
+      in
+      { hscale = scan.horizontal_sampling_factor
+      ; vscale = scan.vertical_sampling_factor
+      ; block = Block.create compute_reconstruction_error
+      ; plane = Plane.create ~width ~height
+      ; quant_table = Identified.find "quant" scan.quant_table params.quant_tables
+      ; dc_huffman_table =
+          Identified.find "dc_huffman" scan.dc_huffman_table dc_huffman_tables
+      ; ac_huffman_table =
+          Identified.find "ac_huffman" scan.ac_huffman_table ac_huffman_tables
+      })
   in
-  { params; scans; writer }
+  { (*params;*) scans; writer }
 ;;
 
 let get_plane t idx = t.scans.(idx).plane
@@ -480,27 +480,27 @@ let encode_seq (t : t) =
   in
   let inner_blocks ~x_mb ~y_mb scan =
     Sequence.init scan.vscale ~f:(fun y_subblk ->
-        Sequence.init scan.hscale ~f:(fun x_subblk ->
-            let x_blk = (x_mb * scan.hscale) + x_subblk in
-            let y_blk = (y_mb * scan.vscale) + y_subblk in
-            scan.block.x_pos <- x_blk * 8;
-            scan.block.y_pos <- y_blk * 8;
-            encode_block
-              scan.plane
-              scan.block
-              ~writer:t.writer
-              ~dc_table:scan.dc_huffman_table
-              ~ac_table:scan.ac_huffman_table
-              ~qnt_table:scan.quant_table;
-            scan.block))
+      Sequence.init scan.hscale ~f:(fun x_subblk ->
+        let x_blk = (x_mb * scan.hscale) + x_subblk in
+        let y_blk = (y_mb * scan.vscale) + y_subblk in
+        scan.block.x_pos <- x_blk * 8;
+        scan.block.y_pos <- y_blk * 8;
+        encode_block
+          scan.plane
+          scan.block
+          ~writer:t.writer
+          ~dc_table:scan.dc_huffman_table
+          ~ac_table:scan.ac_huffman_table
+          ~qnt_table:scan.quant_table;
+        scan.block))
     |> Sequence.concat
   in
   Sequence.init mbs_high ~f:(fun y_mb ->
-      Sequence.init mbs_wide ~f:(fun x_mb ->
-          Sequence.init (Array.length t.scans) ~f:(fun i ->
-              inner_blocks ~x_mb ~y_mb t.scans.(i))
-          |> Sequence.concat)
+    Sequence.init mbs_wide ~f:(fun x_mb ->
+      Sequence.init (Array.length t.scans) ~f:(fun i ->
+        inner_blocks ~x_mb ~y_mb t.scans.(i))
       |> Sequence.concat)
+    |> Sequence.concat)
   |> Sequence.concat
 ;;
 

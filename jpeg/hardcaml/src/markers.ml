@@ -458,8 +458,10 @@ module Dht = struct
               , [ when_
                     i.bits_valid
                     [ count4 <-- count4_next
-                    ; code <-- sll (code.value +: uresize num_codes_at_length 16) 1
-                    ; total_codes <-- total_codes.value +: uresize num_codes_at_length 16
+                    ; code
+                      <-- sll (code.value +: uresize num_codes_at_length ~width:16) ~by:1
+                    ; total_codes
+                      <-- total_codes.value +: uresize num_codes_at_length ~width:16
                     ; when_
                         (count4.value ==:. 15)
                         [ code_write <-- gnd

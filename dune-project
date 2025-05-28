@@ -15,7 +15,7 @@
  (depends
   hardcaml
   hardcaml_fixed_point
-  ppx_deriving_hardcaml
+  ppx_hardcaml
   (hardcaml_waveterm :with-test)
   core
   mdx

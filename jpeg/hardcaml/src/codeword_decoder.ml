@@ -30,7 +30,10 @@ end
 
 let decoder ~length scope (i : _ I.t) =
   let ( -- ) = Scope.naming scope in
-  let ( -- ) s n = s -- [%string "d%{length#Int}$%{n}"] in
+  let ( -- ) ~(loc : [%call_pos]) s n =
+    ignore loc;
+    s -- [%string "d%{length#Int}$%{n}"]
+  in
   (* Latch the code entry for this decoder *)
   let code =
     Code.Of_signal.apply_names ~naming_op:( -- ) ~prefix:"code$"
@@ -60,9 +63,12 @@ let decoder ~length scope (i : _ I.t) =
   (* XXX code base address doesnt need to be 16 bits for DC coefs *)
   (* XXX we can subtract out the base address from the code before this *)
   let offset =
-    code.code_base_address +: uresize bits 16 -: uresize code.code 16 -- "offset"
+    code.code_base_address
+    +: uresize bits ~width:16
+    -: uresize code.code ~width:16
+    -- "offset"
   in
-  let length = Signal.of_int ~width:5 length in
+  let length = of_unsigned_int ~width:5 length in
   { With_valid.valid; value = { Decoded_code.data_address = offset; length } }
 ;;
 

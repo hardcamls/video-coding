@@ -2,6 +2,8 @@ open! Core
 open Hardcaml
 module Quant = Hardcaml_jpeg.Quant
 
+let () = Random4.set_state (Random4.State.make [| 111; 222; 333 |])
+
 let%expect_test "rounding - tie away from zero" =
   let sft = 2 in
   let div = 1 lsl sft in
@@ -98,7 +100,7 @@ let%expect_test "positive" =
 
 module Sim = Cyclesim.With_interface (Quant.I) (Quant.O)
 
-let ( <--. ) a b = a := Bits.of_int ~width:(Bits.width !a) b
+let ( <--. ) a b = a := Bits.of_int_trunc ~width:(Bits.width !a) b
 
 let%expect_test "Test quantiser using random coefs and quant table entries" =
   let num_tests = 10_000 in
@@ -110,7 +112,7 @@ let%expect_test "Test quantiser using random coefs and quant table entries" =
   inputs.clocking.clear := Bits.gnd;
   let qtab =
     Array.init 64 ~f:(fun i ->
-        if i < 4 then i + 1 else if i > 60 then i + (252 - 60) else 1 + Random.int 255)
+      if i < 4 then i + 1 else if i > 60 then i + (252 - 60) else 1 + Random4.int 255)
   in
   print_s [%message (qtab : int array)];
   [%expect
@@ -119,7 +121,9 @@ let%expect_test "Test quantiser using random coefs and quant table entries" =
      (1 2 3 4 160 163 14 196 184 34 223 99 80 244 242 11 232 141 202 24 46 37 221
       7 221 28 217 130 69 76 118 107 211 56 69 227 99 95 11 119 138 20 88 184 49
       216 211 100 251 160 129 119 77 141 216 162 130 145 165 227 227 253 254 255)) |}];
-  let qdata = Array.init num_tests ~f:(fun _ -> Random.int 64, Random.int 4096 - 2048) in
+  let qdata =
+    Array.init num_tests ~f:(fun _ -> Random4.int 64, Random4.int 4096 - 2048)
+  in
   (* load quantisation table *)
   for i = 0 to 63 do
     inputs.quant.quant <--. Quant.one_over_quant_coef qtab.(i);
@@ -137,17 +141,18 @@ let%expect_test "Test quantiser using random coefs and quant table entries" =
     if Bits.to_bool !(outputs.quant_coef_write)
     then
       results
-        := (Bits.to_int !(outputs.quant_coef_address), Bits.to_sint !(outputs.quant_coef))
-           :: !results
+      := ( Bits.to_int_trunc !(outputs.quant_coef_address)
+         , Bits.to_signed_int !(outputs.quant_coef) )
+         :: !results
   in
   (* feed in data - we model a 1 cycle input delay of the data *)
   let last_coef = ref 0 in
   Array.iter qdata ~f:(fun (addr, data) ->
-      inputs.dct_coef <--. !last_coef;
-      last_coef := data;
-      inputs.dct_coef_read <--. 1;
-      inputs.dct_coef_address <--. addr;
-      cycle ());
+    inputs.dct_coef <--. !last_coef;
+    last_coef := data;
+    inputs.dct_coef_read <--. 1;
+    inputs.dct_coef_address <--. addr;
+    cycle ());
   inputs.dct_coef <--. !last_coef;
   inputs.dct_coef_read <--. 0;
   (* flush *)
@@ -158,25 +163,27 @@ let%expect_test "Test quantiser using random coefs and quant table entries" =
   assert (List.length !results = Array.length qdata);
   (* print_s [%message (List.rev !results : (int * int) list) (qdata : (int * int) array)]; *)
   List.iteri (List.rev !results) ~f:(fun idx (addr, result) ->
-      let expected_addr, d = qdata.(idx) in
-      let expected_result = fixed_quant d qtab.(expected_addr) in
-      if expected_addr <> addr || expected_result <> result
-      then
-        raise_s
-          [%message
-            (d : int)
-              (qtab.(expected_addr) : int)
-              (expected_addr : int)
-              (addr : int)
-              (expected_result : int)
-              (result : int)])
+    let expected_addr, d = qdata.(idx) in
+    let expected_result = fixed_quant d qtab.(expected_addr) in
+    if expected_addr <> addr || expected_result <> result
+    then
+      raise_s
+        [%message
+          (d : int)
+            (qtab.(expected_addr) : int)
+            (expected_addr : int)
+            (addr : int)
+            (expected_result : int)
+            (result : int)])
 ;;
 
 let%expect_test "bug hunt" =
   let test d q =
     let expected = fixed_quant d q in
-    let d = Bits.of_int ~width:Quant.dct_coef_bits d in
-    let q = Bits.of_int ~width:Quant.quant_coef_bits (Quant.one_over_quant_coef q) in
+    let d = Bits.of_int_trunc ~width:Quant.dct_coef_bits d in
+    let q =
+      Bits.of_int_trunc ~width:Quant.quant_coef_bits (Quant.one_over_quant_coef q)
+    in
     let doq = Quant.multiply (module Bits) d q in
     let rounded = Quant.round (module Bits) doq in
     print_s
@@ -185,17 +192,19 @@ let%expect_test "bug hunt" =
           (q : Bits.t)
           (doq : Bits.t)
           (rounded : Bits.t)
-          (Bits.to_sint rounded : int)
+          (Bits.to_signed_int rounded : int)
           (expected : int)]
   in
   test (-188) 2;
   [%expect
     {|
     ((d 111101000100) (q 0100000000000) (doq 11111110100010000000000000)
-     (rounded 111110100010) ("Bits.to_sint rounded" -94) (expected -94)) |}];
+     (rounded 111110100010) ("Bits.to_signed_int rounded" -94) (expected -94))
+    |}];
   test 709 1;
   [%expect
     {|
     ((d 001011000101) (q 1000000000000) (doq 00001011000101000000000000)
-     (rounded 001011000101) ("Bits.to_sint rounded" 709) (expected 709)) |}]
+     (rounded 001011000101) ("Bits.to_signed_int rounded" 709) (expected 709))
+    |}]
 ;;

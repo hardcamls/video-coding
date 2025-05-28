@@ -8,9 +8,9 @@ let hw_size = Huffman.size (module Bits)
 
 let%expect_test "derive size" =
   let test i =
-    let bits = Bits.of_int ~width:12 i in
+    let bits = Bits.of_int_trunc ~width:12 i in
     let size = size i in
-    let hw_size = hw_size bits |> Bits.to_int in
+    let hw_size = hw_size bits |> Bits.to_int_trunc in
     if size <> hw_size
     then raise_s [%message (i : int) (bits : Bits.t) (size : int) (hw_size : int)]
   in
@@ -25,10 +25,10 @@ let hw_mag = Huffman.mag (module Bits)
 
 let%expect_test "derive magnitude" =
   let test i =
-    let bits = Bits.of_int ~width:12 i in
+    let bits = Bits.of_int_trunc ~width:12 i in
     let size = size i in
     let mag = mag ~size i in
-    let hw_mag = hw_mag (Bits.of_int ~width:4 size) bits |> Bits.to_int in
+    let hw_mag = hw_mag (Bits.of_int_trunc ~width:4 size) bits |> Bits.to_int_trunc in
     if mag <> hw_mag
     then
       raise_s [%message (i : int) (bits : Bits.t) (size : int) (mag : int) (hw_mag : int)]
@@ -47,7 +47,7 @@ type run_coef =
   }
 
 let data = [| { run = 0; coef = 3 }; { run = 62; coef = 32 } |]
-let ( <--. ) a b = a := Bits.of_int ~width:(Bits.width !a) b
+let ( <--. ) a b = a := Bits.of_int_trunc ~width:(Bits.width !a) b
 
 let test ?(waves = false) () =
   let sim =
@@ -69,13 +69,13 @@ let test ?(waves = false) () =
   let pos = ref 0 in
   for _ = 0 to 10 do
     (inputs.rle_in.value.run
-    <--.
-    try data.(!pos).run with
-    | _ -> 0);
+     <--.
+     try data.(!pos).run with
+     | _ -> 0);
     (inputs.rle_in.value.coef
-    <--.
-    try data.(!pos).coef with
-    | _ -> 0);
+     <--.
+     try data.(!pos).coef with
+     | _ -> 0);
     cycle ();
     Int.incr pos
   done;
@@ -85,8 +85,9 @@ let test ?(waves = false) () =
 let%expect_test "simulation" =
   Option.iter
     (test ~waves:true ())
-    ~f:(Waveform.print ~display_width:100 ~display_height:25 ~wave_width:2 ~start_cycle:0);
-  [%expect{|
+    ~f:(Waveform.print ~display_width:100 ~display_height:26 ~wave_width:2 ~start_cycle:0);
+  [%expect
+    {|
     ┌Signals───────────┐┌Waves─────────────────────────────────────────────────────────────────────────┐
     │clock             ││┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  │
     │                  ││   └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──│
@@ -110,6 +111,8 @@ let%expect_test "simulation" =
     │                  ││────────────────────────────────────────────────────────────────────────      │
     │num_bits          ││ 00                                                                           │
     │                  ││────────────────────────────────────────────────────────────────────────      │
-    │STATE             ││                                                                              │
-    └──────────────────┘└──────────────────────────────────────────────────────────────────────────────┘ |}]
+    │                  ││────────────────────────────────────────────────────────────────────────      │
+    │STATE             ││ Code                                                                         │
+    └──────────────────┘└──────────────────────────────────────────────────────────────────────────────┘
+    |}]
 ;;

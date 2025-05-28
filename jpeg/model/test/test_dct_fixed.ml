@@ -1,10 +1,12 @@
 open Core
 
+let () = Random4.set_state (Random4.State.make [| 111; 222; 333 |])
+
 (* Here we see the maximum range is [-0.5 < x < 0.5] *)
 let%expect_test "min and max idct coefs" =
   let calc matrix min_or_max =
     Array.fold matrix ~init:0. ~f:(fun acc ->
-        Array.fold ~init:acc ~f:(fun acc m -> min_or_max m acc))
+      Array.fold ~init:acc ~f:(fun acc m -> min_or_max m acc))
   in
   let fdct =
     calc Hardcaml_jpeg_model.Dct.Floating_point.Eight_point.forward_transform_matrix
@@ -31,12 +33,12 @@ let%expect_test "min and max idct coefs" =
 (* Play with the required fixed precision.  
 
   10 bits produces an error of around +/-1.
-  
+
   12 bits is about +/- 0.25
 
   14 bits is about +/- 0.1, except in the DC coefficient where we are seeing 
   diminishing returns.
- *)
+*)
 
 type eval_result =
   { unscaled : int
@@ -63,7 +65,7 @@ let%expect_test "test scaling" =
       (scale_and_clip i ~fixed_prec:prec)
       f
       (if (i lsr (prec - 1)) land 1 <> 0 then "t" else "f")
-      (Hardcaml.Bits.of_int ~width:5 i |> Hardcaml.Bits.to_string)
+      (Hardcaml.Bits.of_signed_int ~width:5 i |> Hardcaml.Bits.to_string)
   done;
   [%expect
     {|
@@ -112,7 +114,7 @@ let eval_in_fixed_point ~coefs ~inputs ~fixed_prec =
 ;;
 
 let%expect_test "fixed sum" =
-  let inputs = Array.init 8 ~f:(fun _ -> Random.int 400 - 200) in
+  let inputs = Array.init 8 ~f:(fun _ -> Random4.int 400 - 200) in
   let row i =
     let row =
       Hardcaml_jpeg_model.Dct.Floating_point.Eight_point.forward_transform_matrix.(i)

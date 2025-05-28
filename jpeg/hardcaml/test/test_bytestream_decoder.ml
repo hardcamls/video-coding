@@ -18,11 +18,11 @@ let display_rules =
 ;;
 
 let read_header
-    (inputs : _ Decoder.I.t)
-    (outputs : _ Decoder.O.t)
-    (outputs_before : _ Decoder.O.t)
+  (inputs : _ Decoder.I.t)
+  (outputs : _ Decoder.O.t)
+  (outputs_before : _ Decoder.O.t)
   =
-  let unref x = Bits.to_int !x in
+  let unref x = Bits.to_int_trunc !x in
   let components = ref [] in
   let scan_selector = ref [] in
   let quant_tables = ref [] in
@@ -34,35 +34,33 @@ let read_header
     if Bits.to_bool !(sof.component_write)
     then
       components
-        := Markers.Component.Fields_with_identifier.map sof.component ~f:unref
-           :: !components;
+      := Markers.Component.Fields_with_identifier.map sof.component ~f:unref
+         :: !components;
     let sos = outputs.markers.sos in
     if Bits.to_bool !(sos.write_scan_selector)
     then
       scan_selector
-        := Markers.Scan_selector.Fields_with_identifier.map sos.scan_selector ~f:unref
-           :: !scan_selector;
+      := Markers.Scan_selector.Fields_with_identifier.map sos.scan_selector ~f:unref
+         :: !scan_selector;
     let dqt = outputs.markers.dqt in
     if Bits.to_bool !(dqt.element_write)
     then
       quant_tables
-        := ( unref dqt.fields.table_identifier
-           , unref dqt.element_address
-           , unref dqt.element )
-           :: !quant_tables;
+      := (unref dqt.fields.table_identifier, unref dqt.element_address, unref dqt.element)
+         :: !quant_tables;
     let dht = outputs.markers.dht in
     if Bits.to_bool !(dht.code.code_write)
     then
       code_words
-        := ( Markers.Dht.Header.Fields.map dht.header ~f:unref
-           , Markers.Dht.Code.map dht.code ~f:unref )
-           :: !code_words;
+      := ( Markers.Dht.Header.Fields.map dht.header ~f:unref
+         , Markers.Dht.Code.map dht.code ~f:unref )
+         :: !code_words;
     if Bits.to_bool !(dht.code_data.data_write)
     then
       code_data
-        := ( Markers.Dht.Header.Fields.map dht.header ~f:unref
-           , Markers.Dht.Code_data.map dht.code_data ~f:unref )
-           :: !code_data;
+      := ( Markers.Dht.Header.Fields.map dht.header ~f:unref
+         , Markers.Dht.Code_data.map dht.code_data ~f:unref )
+         :: !code_data;
     if Bits.to_bool !(outputs_before.bits_valid) && Bits.to_bool !(inputs.bits_ready)
     then entropy_coded_segment := Bits.to_char !(outputs.bits) :: !entropy_coded_segment
   in
@@ -84,46 +82,46 @@ let read_header
         |> List.map ~f:(List.sort ~compare:[%compare: int * int * int])
       in
       List.map q ~f:(fun l ->
-          match l with
-          | [] -> failwith ""
-          | (idx, _, _) :: _ ->
-            let a = Array.create ~len:64 0 in
-            List.iter l ~f:(fun (_, i, q) -> a.(i) <- q);
-            idx, a)
+        match l with
+        | [] -> failwith ""
+        | (idx, _, _) :: _ ->
+          let a = Array.create ~len:64 0 in
+          List.iter l ~f:(fun (_, i, q) -> a.(i) <- q);
+          idx, a)
     in
     let code_words =
       let c =
         List.group !code_words ~break:(fun (hdr0, _) (hdr1, _) ->
-            not
-              ([%compare.equal: int * int]
-                 (hdr0.table_class, hdr0.destination_identifier)
-                 (hdr1.table_class, hdr1.destination_identifier)))
+          not
+            ([%compare.equal: int * int]
+               (hdr0.table_class, hdr0.destination_identifier)
+               (hdr1.table_class, hdr1.destination_identifier)))
         |> List.map
              ~f:
                (List.sort ~compare:(fun (_, (a : _ Markers.Dht.Code.t)) (_, b) ->
-                    Int.compare a.code_length_minus1 b.code_length_minus1))
+                  Int.compare a.code_length_minus1 b.code_length_minus1))
       in
       List.map c ~f:(fun l ->
-          match l with
-          | [] -> failwith ""
-          | (hdr, _) :: _ -> hdr, List.map l ~f:(fun (_, data) -> data))
+        match l with
+        | [] -> failwith ""
+        | (hdr, _) :: _ -> hdr, List.map l ~f:(fun (_, data) -> data))
     in
     let code_data =
       let c =
         List.group !code_data ~break:(fun (hdr0, _) (hdr1, _) ->
-            not
-              ([%compare.equal: int * int]
-                 (hdr0.table_class, hdr0.destination_identifier)
-                 (hdr1.table_class, hdr1.destination_identifier)))
+          not
+            ([%compare.equal: int * int]
+               (hdr0.table_class, hdr0.destination_identifier)
+               (hdr1.table_class, hdr1.destination_identifier)))
         |> List.map
              ~f:
                (List.sort ~compare:(fun (_, (a : _ Markers.Dht.Code_data.t)) (_, b) ->
-                    Int.compare a.data_address b.data_address))
+                  Int.compare a.data_address b.data_address))
       in
       List.map c ~f:(fun l ->
-          match l with
-          | [] -> failwith ""
-          | (hdr, _) :: _ -> hdr, List.map l ~f:(fun (_, data) -> data))
+        match l with
+        | [] -> failwith ""
+        | (hdr, _) :: _ -> hdr, List.map l ~f:(fun (_, data) -> data))
     in
     let sexp_of_dht_header (t : _ Markers.Dht.Header.Fields.t) =
       let class_ = t.table_class in
@@ -199,8 +197,8 @@ let test ?(waves = false) ?(random_ready = false) jpeg =
     then (
       (inputs.jpeg_valid := Bits.vdd;
        inputs.jpeg
-         := try Bits.of_char bits.[!pos] with
-            | _ -> Bits.zero 8);
+       := try Bits.of_char bits.[!pos] with
+          | _ -> Bits.zero 8);
       Int.incr pos);
     Int.incr num_cycles
   in
@@ -533,7 +531,7 @@ let%expect_test "test reader" =
     │decoder_start     ││   ╥                                                                          │
     │                  ││───╨───────────────────────────────────────────────────────────────           │
     │                  ││╥╥╥╥────────────────╥─────╥────────╥───╥─╥────╥╥─╥──╥────────╥╥──╥╥           │
-    │BSTATE            ││║║║║ 6              ║ 6   ║ 6      ║ 6 ║ ║ 6  ║║ ║ 6║ 6      ║║ 6║║           │
+    │BSTATE            ││║║║║ Entropy_coded_.║ Ent.║ Entrop.║ E.║ ║ En.║║ ║ .║ Entrop.║║ .║║           │
     │                  ││╨╨╨╨────────────────╨─────╨────────╨───╨─╨────╨╨─╨──╨────────╨╨──╨╨           │
     │                  ││╥──────────────────────────────────────────────────────────────────           │
     │SKIP_COUNT        ││║ 0000                                                                        │
@@ -544,5 +542,6 @@ let%expect_test "test reader" =
     │                  ││╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥╥           │
     │dht$dhthdr$i$bits ││║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║║           │
     │                  ││╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨╨           │
-    └──────────────────┘└──────────────────────────────────────────────────────────────────────────────┘ |}]
+    └──────────────────┘└──────────────────────────────────────────────────────────────────────────────┘
+    |}]
 ;;

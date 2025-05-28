@@ -1,6 +1,6 @@
 (* Read the input stream byte-by-byte and decode the various headers and 
    entropy coded segments.
-   
+
    There is a definite limit to doing this a byte at a time as we can consume 
    16 bits per cycle in the huffman decoder.  However, in practice I doubt this 
    is a serioius issue and is /much/ simpler to get a full top level jpeg 
@@ -53,7 +53,7 @@ end
 module M = Hardcaml_jpeg_model.Marker_code
 module Var = Always.Variable
 
-let markers x = List.map x ~f:(fun (x, y) -> Signal.of_int ~width:8 x, y)
+let markers x = List.map x ~f:(fun (x, y) -> Signal.of_unsigned_int ~width:8 x, y)
 
 (* SOI -> headers -> SOS -> EOI (repeat) *)
 
@@ -277,7 +277,7 @@ module With_fifo16 = struct
         ~rd:i.bits_ready
     in
     O'.Of_signal.assign bytestream (create scope { i with bits_ready = not_full });
-    not_full <== ~:(fifo.full);
+    not_full <-- ~:(fifo.full);
     { O.jpeg_ready = bytestream.jpeg_ready
     ; done_ = bytestream.done_
     ; bits = fifo.q

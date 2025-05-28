@@ -36,12 +36,12 @@ open Signal
 module Idct = Dct.Make (Dct.Idct_config)
 
 let idct_with_rams
-    ~scope
-    ~(clocking : _ Clocking.t)
-    ~start_idct
-    ~start_output
-    ~(coefs : _ Codeblock_decoder.Idct_coefs.t)
-    ~(output_read_port : read_port)
+  ~scope
+  ~(clocking : _ Clocking.t)
+  ~start_idct
+  ~start_output
+  ~(coefs : _ Codeblock_decoder.Idct_coefs.t)
+  ~(output_read_port : _ Read_port.t)
   =
   let ( -- ) = Scope.naming scope in
   let toggle =
@@ -170,11 +170,10 @@ let create scope (i : _ I.t) =
   in
   let pixel, idct_done =
     let output_read_port =
-      ({ read_clock = i.clocking.clock
-       ; read_address = i.pixel_read_address
-       ; read_enable = i.pixel_read_enable
-       }
-        : read_port)
+      { Read_port.read_clock = i.clocking.clock
+      ; read_address = i.pixel_read_address
+      ; read_enable = i.pixel_read_enable
+      }
     in
     idct_with_rams
       ~scope

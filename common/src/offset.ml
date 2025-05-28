@@ -11,7 +11,7 @@ let arg_type =
       try
         match String.split_on_chars ~on:[ 'x'; ','; '-' ] s with
         | [ x_off; y_off ] -> { x_off = Int.of_string x_off; y_off = Int.of_string y_off }
-        | _ -> raise Caml.Not_found
+        | _ -> failwith ""
       with
       | _ -> raise_s [%message "Invalid frame size specified" (s : string)])
 ;;

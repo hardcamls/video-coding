@@ -35,7 +35,7 @@ let display_rules =
     ]
 ;;
 
-let ( <--. ) a b = a := Bits.of_int ~width:(Bits.width !a) b
+let ( <--. ) a b = a := Bits.of_int_trunc ~width:(Bits.width !a) b
 
 type component =
   { ident : int
@@ -51,10 +51,10 @@ type scan =
   }
 
 let write_component
-    ~(inputs : _ Scan_controller.I.t)
-    ~cycle
-    ~address
-    { ident; vert; horz; qtab }
+  ~(inputs : _ Scan_controller.I.t)
+  ~cycle
+  ~address
+  { ident; vert; horz; qtab }
   =
   inputs.sof.component.identifier <--. ident;
   inputs.sof.component.fields.vertical_sampling_factor <--. vert;
@@ -112,9 +112,9 @@ let test ?(waves = false) ~width ~height components scans =
   let cycle () =
     if Bits.to_bool !(outputs.starter)
     then (
-      let x_pos = Bits.to_int !(outputs.x_pos) in
-      let y_pos = Bits.to_int !(outputs.y_pos) in
-      let scan_index = Bits.to_int !(outputs.scan_index) in
+      let x_pos = Bits.to_int_trunc !(outputs.x_pos) in
+      let y_pos = Bits.to_int_trunc !(outputs.y_pos) in
+      let scan_index = Bits.to_int_trunc !(outputs.scan_index) in
       print_s [%message (scan_index : int) (x_pos : int) (y_pos : int)]);
     Cyclesim.cycle sim
   in

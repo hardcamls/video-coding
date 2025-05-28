@@ -80,12 +80,11 @@ type t =
   ; size : Size.t
   ; size_out : Size.t
   ; format : Yuv_format.t
-  ; mutable framerate : int
+  ; framerate : int
   ; mutable fullscreen : bool
   ; mutable grid : bool
   ; mutable diff_mode : Diff_mode.t
-  ; mutable show_plane : Plane_mode.t
-  ; verbose : bool
+  ; mutable show_plane : Plane_mode.t (*; verbose : bool*)
   }
 
 type ba = (int, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
@@ -156,9 +155,9 @@ module File_io = struct
         if n <> size
         then (
           b.{n}
-            <- (match In_channel.input_byte f with
-               | Some x -> x
-               | None -> raise_end_of_image ());
+          <- (match In_channel.input_byte f with
+              | Some x -> x
+              | None -> raise_end_of_image ());
           rd (n + 1))
       in
       rd 0;
@@ -254,18 +253,18 @@ module Transform = struct
       let oy, ou, ov = off_pixel t in
       let loop f =
         loop 0 (t.size.width - 1) 1 (fun x ->
-            loop 0 (t.size.height - 1) 1 (fun y ->
-                let oy, ou, ov = oy x y, ou x y, ov x y in
-                let vy, vu, vv = f oy ou ov in
-                b.{oy} <- vy;
-                b.{ou} <- vu;
-                b.{ov} <- vv))
+          loop 0 (t.size.height - 1) 1 (fun y ->
+            let oy, ou, ov = oy x y, ou x y, ov x y in
+            let vy, vu, vv = f oy ou ov in
+            b.{oy} <- vy;
+            b.{ou} <- vu;
+            b.{ov} <- vv))
       in
       (match t.show_plane with
-      | All -> ()
-      | Y -> loop (fun oy _ou _ov -> f.{oy}, 128, 128)
-      | U -> loop (fun _oy ou _ov -> 128, f.{ou}, 128)
-      | V -> loop (fun _oy _ou ov -> 128, 128, f.{ov}));
+       | All -> ()
+       | Y -> loop (fun oy _ou _ov -> f.{oy}, 128, 128)
+       | U -> loop (fun _oy ou _ov -> 128, f.{ou}, 128)
+       | V -> loop (fun _oy _ou ov -> 128, 128, f.{ov}));
       b
   ;;
 
@@ -275,11 +274,11 @@ module Transform = struct
       let b = get_buffer f1 b in
       let oy, ou, ov = off_pixel t in
       loop 0 (t.size.width - 1) 1 (fun x ->
-          loop 0 (t.size.height - 1) 1 (fun y ->
-              let oy, ou, ov = oy x y, ou x y, ov x y in
-              b.{oy} <- abs (f1.{oy} - f2.{oy});
-              b.{ou} <- ((f1.{oy} - f2.{oy}) / 2) + 128;
-              b.{ov} <- ((f1.{oy} - f2.{oy}) / 2) + 128));
+        loop 0 (t.size.height - 1) 1 (fun y ->
+          let oy, ou, ov = oy x y, ou x y, ov x y in
+          b.{oy} <- abs (f1.{oy} - f2.{oy});
+          b.{ou} <- ((f1.{oy} - f2.{oy}) / 2) + 128;
+          b.{ov} <- ((f1.{oy} - f2.{oy}) / 2) + 128));
       b
   ;;
 
@@ -293,14 +292,14 @@ module Transform = struct
       done;
       let oy, ou, ov = off_pixel t in
       loop 0 (t.size.width - 1) 1 (fun x ->
-          loop 0 (t.size.height - 1) 1 (fun y ->
-              let oy, ou, ov = oy x y, ou x y, ov x y in
-              b.{oy}
-                <- (if f1.{oy} <> f2.{oy} || f1.{ou} <> f2.{ou} || f1.{ov} <> f2.{ov}
-                   then 255
-                   else 0);
-              b.{ou} <- 128;
-              b.{ov} <- 128));
+        loop 0 (t.size.height - 1) 1 (fun y ->
+          let oy, ou, ov = oy x y, ou x y, ov x y in
+          b.{oy}
+          <- (if f1.{oy} <> f2.{oy} || f1.{ou} <> f2.{ou} || f1.{ov} <> f2.{ov}
+              then 255
+              else 0);
+          b.{ou} <- 128;
+          b.{ov} <- 128));
       b
   ;;
 
@@ -311,15 +310,15 @@ module Transform = struct
       let oy, ou, ov = off_pixel t in
       Bigarray.Array1.blit f b;
       loop 16 (t.size.width - 1) 16 (fun x ->
-          loop 0 (t.size.height - 1) 1 (fun y ->
-              b.{oy x y} <- 255;
-              b.{ou x y} <- 128;
-              b.{ov x y} <- 128));
+        loop 0 (t.size.height - 1) 1 (fun y ->
+          b.{oy x y} <- 255;
+          b.{ou x y} <- 128;
+          b.{ov x y} <- 128));
       loop 16 (t.size.height - 1) 16 (fun y ->
-          loop 0 (t.size.width - 1) 1 (fun x ->
-              b.{oy x y} <- 255;
-              b.{ou x y} <- 128;
-              b.{ov x y} <- 128));
+        loop 0 (t.size.width - 1) 1 (fun x ->
+          b.{oy x y} <- 255;
+          b.{ou x y} <- 128;
+          b.{ov x y} <- 128));
       b
   ;;
 
@@ -346,10 +345,10 @@ module Transform = struct
       | None -> f1
       | Some f2 ->
         (match t.diff_mode with
-        | NoDiff -> f1
-        | OtherFile -> f2
-        | Diff -> draw_diff t f1 f2
-        | ExactDiff -> draw_exact_diff t f1 f2)
+         | NoDiff -> f1
+         | OtherFile -> f2
+         | Diff -> draw_diff t f1 f2
+         | ExactDiff -> draw_exact_diff t f1 f2)
     in
     (* grid *)
     let f = if t.grid then draw_grid t f else f in
@@ -601,8 +600,10 @@ let arg =
         (optional_with_default Yuv_format.C420 (Arg_type.create Yuv_format.of_string))
         ~doc:" YUV format"
     and framerate = flag "-r" (optional_with_default 30 int) ~doc:" frame rate"
-    and fullscreen = flag "-d" no_arg ~doc:" start in fullscreen mode"
-    and verbose = flag "-v" no_arg ~doc:" verbose" in
+    and fullscreen =
+      flag "-d" no_arg ~doc:" start in fullscreen mode"
+      (*and verbose = flag "-v" no_arg ~doc:" verbose"*)
+    in
     { in_file
     ; diff_file
     ; size
@@ -612,7 +613,6 @@ let arg =
     ; fullscreen
     ; grid = false
     ; diff_mode = Diff_mode.NoDiff
-    ; show_plane = Plane_mode.All
-    ; verbose
+    ; show_plane = Plane_mode.All (*; verbose*)
     }]
 ;;

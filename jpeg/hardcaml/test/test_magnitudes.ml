@@ -10,9 +10,9 @@ let%expect_test "test upto cat=11" =
     for code = 0 to (1 lsl cat) - 1 do
       let result =
         Hardcaml_jpeg.Codeblock_decoder.For_testing.decode_magnitude
-          (of_int ~width:4 cat)
-          (of_int ~width:12 (code lsl (12 - cat)))
-        |> Bits.to_sint
+          (of_int_trunc ~width:4 cat)
+          (of_int_trunc ~width:12 (code lsl (12 - cat)))
+        |> Bits.to_signed_int
       in
       let expected = Hardcaml_jpeg_model.Decoder.For_testing.mag cat code in
       if result <> expected

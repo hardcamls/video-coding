@@ -54,17 +54,17 @@ module Core = struct
     let component_address_onehot = binary_to_onehot component_address in
     let component_map =
       Array.init max_components ~f:(fun index ->
-          Clocking.reg
-            clocking
-            ~enable:(sof.component_write &: component_address_onehot.:(index))
-            sof.component.identifier)
+        Clocking.reg
+          clocking
+          ~enable:(sof.component_write &: component_address_onehot.:(index))
+          sof.component.identifier)
     in
     let component_identifier =
       priority_select
         (List.init max_components ~f:(fun index ->
-             { With_valid.valid = component_map.(index) ==: selector
-             ; value = Signal.of_int ~width:log_max_components index
-             }))
+           { With_valid.valid = component_map.(index) ==: selector
+           ; value = of_unsigned_int ~width:log_max_components index
+           }))
     in
     component_identifier
   ;;
@@ -97,7 +97,7 @@ module Core = struct
     let enable = i.sof.component_write in
     let max_reg factor =
       Clocking.reg_fb clocking ~width:(width factor) ~enable ~f:(fun d ->
-          mux2 (factor >: d) factor d)
+        mux2 (factor >: d) factor d)
     in
     let max_horz =
       let factor = i.sof.component.fields.horizontal_sampling_factor in
@@ -114,34 +114,34 @@ module Core = struct
     let width = i.sof.frame_header.width in
     let height = i.sof.frame_header.height in
     let rounding max =
-      mux max ([ 0; 7; 15; 23; 31 ] |> List.map ~f:(Signal.of_int ~width:16))
+      mux max ([ 0; 7; 15; 23; 31 ] |> List.map ~f:(of_unsigned_int ~width:16))
     in
     let width = width +: rounding max_horz_sampling in
     let height = height +: rounding max_vert_sampling in
     let round_to max x =
       mux
         max
-        [ drop_bottom x 3
-        ; drop_bottom x 3
-        ; drop_bottom x 4 @: zero 1
-        ; drop_bottom x 4 @: zero 1
-        ; drop_bottom x 5 @: zero 2
+        [ drop_bottom x ~width:3
+        ; drop_bottom x ~width:3
+        ; drop_bottom x ~width:4 @: zero 1
+        ; drop_bottom x ~width:4 @: zero 1
+        ; drop_bottom x ~width:5 @: zero 2
         ]
     in
     round_to max_horz_sampling width, round_to max_vert_sampling height
   ;;
 
   let component_width_and_height_in_blocks
-      ~width_in_blocks
-      ~height_in_blocks
-      ~max_horz_sampling
-      ~max_vert_sampling
-      ~horz_sampling
-      ~vert_sampling
+    ~width_in_blocks
+    ~height_in_blocks
+    ~max_horz_sampling
+    ~max_vert_sampling
+    ~horz_sampling
+    ~vert_sampling
     =
     let scale max sampling size =
       let scale = max -: sampling in
-      log_shift srl size scale
+      log_shift ~f:srl size ~by:scale
     in
     ( scale max_horz_sampling horz_sampling width_in_blocks
     , scale max_vert_sampling vert_sampling height_in_blocks )
@@ -208,22 +208,22 @@ module Core = struct
                 Of_signal.(
                   pack
                     (mux2 update_scan.value (Of_always.value scan_r)
-                    @@ map2
-                         port_widths
-                         { dc =
-                             i.sos.scan_selector.fields.dc_coef_selector.:[( log_max_scans
-                                                                             - 1
-                                                                           , 0 )]
-                         ; ac =
-                             i.sos.scan_selector.fields.ac_coef_selector.:[( log_max_scans
-                                                                             - 1
-                                                                           , 0 )]
-                         ; component_index = component_identifier.value
-                         ; x_pos = zero 13
-                         ; y_pos = zero 13
-                         ; dc_pred = zero 12
-                         }
-                         ~f:(fun w d -> sel_bottom d w))))
+                     @@ map2
+                          port_widths
+                          { dc =
+                              i.sos.scan_selector.fields.dc_coef_selector.:[( log_max_scans
+                                                                              - 1
+                                                                            , 0 )]
+                          ; ac =
+                              i.sos.scan_selector.fields.ac_coef_selector.:[( log_max_scans
+                                                                              - 1
+                                                                            , 0 )]
+                          ; component_index = component_identifier.value
+                          ; x_pos = Signal.zero 13
+                          ; y_pos = Signal.zero 13
+                          ; dc_pred = Signal.zero 12
+                          }
+                          ~f:(fun w d -> sel_bottom d ~width:w))))
           }
         ~read_address:scan_address.value
       |> Scan_state.Of_signal.unpack

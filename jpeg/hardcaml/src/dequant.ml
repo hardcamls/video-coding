@@ -20,30 +20,30 @@ end
 let create _scope (i : _ I.t) =
   let q =
     List.init 2 ~f:(fun id ->
-        (Ram.create
-           ~size:64
-           ~collision_mode:Write_before_read
-           ~write_ports:
-             [| { write_clock = i.clocking.clock
-                ; write_address = i.dqt.element_address
-                ; write_data = i.dqt.element.:[7, 0]
-                ; write_enable =
-                    i.dqt.element_write &: (i.dqt.fields.table_identifier ==:. id)
-                }
-             |]
-           ~read_ports:
-             [| { read_clock = i.clocking.clock
-                ; read_address = i.coefs_in.address
-                ; read_enable = i.coefs_in.write
-                }
-             |]
-           ()).(0))
+      (Ram.create
+         ~size:64
+         ~collision_mode:Write_before_read
+         ~write_ports:
+           [| { write_clock = i.clocking.clock
+              ; write_address = i.dqt.element_address
+              ; write_data = i.dqt.element.:[7, 0]
+              ; write_enable =
+                  i.dqt.element_write &: (i.dqt.fields.table_identifier ==:. id)
+              }
+           |]
+         ~read_ports:
+           [| { read_clock = i.clocking.clock
+              ; read_address = i.coefs_in.address
+              ; read_enable = i.coefs_in.write
+              }
+           |]
+         ()).(0))
     |> mux i.table_select
   in
   let zz_addr =
     Hardcaml_jpeg_model.Zigzag.inverse
     |> Array.to_list
-    |> List.map ~f:(Signal.of_int ~width:6)
+    |> List.map ~f:(Signal.of_unsigned_int ~width:6)
     |> mux (Clocking.reg i.clocking i.coefs_in.address)
   in
   let dequantized_coef = (ue q *+ Clocking.reg i.clocking i.coefs_in.coef).:[11, 0] in

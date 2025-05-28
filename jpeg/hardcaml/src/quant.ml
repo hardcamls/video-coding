@@ -46,12 +46,13 @@ let multiply (type a) (module Signal : Comb.S with type t = a) (d : a) q =
 
 let round (type a) (module Signal : Comb.S with type t = a) (doq : a) =
   let open Signal in
-  let half = of_int ~width:(width doq) (1 lsl (quant_coef_bits - 2)) in
+  (* XXX should this be signed or unsigned? *)
+  let half = of_int_trunc ~width:(width doq) (1 lsl (quant_coef_bits - 2)) in
   let half_minus_1 =
-    Signal.of_int ~width:(width doq) ((1 lsl (quant_coef_bits - 2)) - 1)
+    of_int_trunc ~width:(width doq) ((1 lsl (quant_coef_bits - 2)) - 1)
   in
   let rnd = mux2 (msb doq) half_minus_1 half in
-  lsbs (lsbs (drop_bottom (doq +: rnd) (quant_coef_bits - 1)))
+  lsbs (lsbs (drop_bottom (doq +: rnd) ~width:(quant_coef_bits - 1)))
 ;;
 
 let create _scope (i : _ I.t) =

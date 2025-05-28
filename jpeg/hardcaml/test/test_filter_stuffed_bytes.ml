@@ -4,6 +4,8 @@ open Hardcaml_waveterm
 module Fsb = Hardcaml_jpeg.Filter_stuffed_bytes
 module Sim = Cyclesim.With_interface (Fsb.I) (Fsb.O)
 
+let () = Random4.set_state (Random4.State.make [| 111; 222; 333 |])
+
 let display_rules =
   let module I = Display_rules.With_interface (Fsb.I) in
   let module O = Display_rules.With_interface (Fsb.O) in
@@ -30,7 +32,7 @@ let step_test steps =
   inputs.clocking.clear := Bits.gnd;
   let step valid data ready =
     inputs.i_valid := Bits.of_bool valid;
-    inputs.i_data := Bits.of_int ~width:16 data;
+    inputs.i_data := Bits.of_int_trunc ~width:16 data;
     inputs.o_ready := Bits.of_bool ready;
     Cyclesim.cycle sim
   in
@@ -51,7 +53,8 @@ let%expect_test "ready/valid" =
     ; true, 0x45, true
     ; false, 0x0, true
     ];
-  [%expect{|
+  [%expect
+    {|
     ┌Signals───────────┐┌Waves───────────────────────────────────────────────────────────────────────────────────┐
     │clock             ││┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐│
     │                  ││   └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └│
@@ -111,7 +114,8 @@ let%expect_test "test byte stuffing removal" =
     ; true, 0xeeff, true
     ; false, 0x0, true
     ];
-  [%expect{|
+  [%expect
+    {|
     ┌Signals───────────┐┌Waves───────────────────────────────────────────────────────────────────────────────────┐
     │clock             ││┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐│
     │                  ││   └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └│
@@ -171,7 +175,8 @@ let%expect_test "byte stuffing crossing words" =
     ; true, 0xeeff, true
     ; false, 0x0, true
     ];
-  [%expect{|
+  [%expect
+    {|
     ┌Signals───────────┐┌Waves───────────────────────────────────────────────────────────────────────────────────┐
     │clock             ││┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐│
     │                  ││   └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └│
@@ -233,7 +238,8 @@ let%expect_test "zeros and stuffing" =
     ; true, 0xddee, true
     ; false, 0x0, true
     ];
-  [%expect{|
+  [%expect
+    {|
     ┌Signals───────────┐┌Waves───────────────────────────────────────────────────────────────────────────────────┐
     │clock             ││┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐│
     │                  ││   └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └│
@@ -308,7 +314,7 @@ let add_stuffing d =
 let create_entropy_bits ~min ~size =
   (* create some random data between [min..255].  THe larger [min] is, the 
        more ff's we'll end up with which is better for testing, . ] *)
-  let d = Array.init size ~f:(fun _ -> Random.int (256 - min) + min) in
+  let d = Array.init size ~f:(fun _ -> Random4.int (256 - min) + min) in
   d, add_stuffing d
 ;;
 
@@ -337,9 +343,9 @@ let test ?(waves = false) ?(verbose = false) d q =
     then
       (* print_s [%message (Bits.to_int !(outputs.o_data) : Int.Hex.t)]; *)
       r
-        := Bits.(to_int !(outputs.o_data).:[7, 0])
-           :: Bits.(to_int !(outputs.o_data).:[15, 8])
-           :: !r
+      := Bits.(to_int_trunc !(outputs.o_data).:[7, 0])
+         :: Bits.(to_int_trunc !(outputs.o_data).:[15, 8])
+         :: !r
   in
   let write_input ?(force = false) () =
     let getq i =
@@ -349,7 +355,7 @@ let test ?(waves = false) ?(verbose = false) d q =
     if Bits.to_bool !(outputs_before.i_ready) || force
     then (
       let i_data =
-        Bits.concat_msb (List.map [ getq 0; getq 1 ] ~f:(Bits.of_int ~width:8))
+        Bits.concat_msb (List.map [ getq 0; getq 1 ] ~f:(Bits.of_int_trunc ~width:8))
       in
       (* print_s [%message (Bits.to_int i_data : Int.Hex.t) (!pos : int)]; *)
       inputs.i_data := i_data;
@@ -366,7 +372,7 @@ let test ?(waves = false) ?(verbose = false) d q =
   write_input ~force:true ();
   while !pos < Array.length q do
     cycle ();
-    if Random.int 2 = 0 && true
+    if Random4.int 2 = 0 && true
     then (
       inputs.o_ready := Bits.gnd;
       cycle ();
@@ -399,7 +405,8 @@ let%expect_test "consequetive stuffing" =
   Option.iter
     waves
     ~f:(Waveform.print ~display_rules ~wave_width:2 ~display_width:110 ~display_height:49);
-  [%expect{|
+  [%expect
+    {|
     ((d (0xff 0xff 0xa 0xb 0xff 0xc 0xff 0xff 0xd))
      (q (0xff 0x0 0xff 0x0 0xa 0xb 0xff 0x0 0xc 0xff 0x0 0xff 0x0 0xd)))
     (r (0xff 0xff 0xa 0xb 0xff 0xc 0xff 0xff))
@@ -461,7 +468,8 @@ let%expect_test "zeros and stuffing" =
   Option.iter
     waves
     ~f:(Waveform.print ~display_rules ~wave_width:2 ~display_width:110 ~display_height:49);
-  [%expect{|
+  [%expect
+    {|
     ((d (0x0 0x0 0x0 0x0 0xff 0x0 0xff 0x0 0x0 0x0 0xff))
      (q (0x0 0x0 0x0 0x0 0xff 0x0 0x0 0xff 0x0 0x0 0x0 0x0 0xff 0x0)))
     (r (0x0 0x0 0x0 0x0 0xff 0x0 0xff 0x0 0x0 0x0))
@@ -527,5 +535,5 @@ let%expect_test "regression" =
   Option.iter
     waves
     ~f:(Waveform.print ~display_rules ~wave_width:2 ~display_width:110 ~display_height:46);
-  [%expect{||}]
+  [%expect {||}]
 ;;

@@ -4,11 +4,11 @@ open Hardcaml_jpeg
 open Hardcaml_waveterm
 
 module Test (X : sig
-  module Fields : Interface.S
+    module Fields : Interface.S
 
-  val marker_code : int
-  val second_marker : bool
-end) =
+    val marker_code : int
+    val second_marker : bool
+  end) =
 struct
   open X
   module Decoder = Fields_decoder.Make (Fields)
@@ -38,7 +38,9 @@ struct
         create
           ~bits
           scope
-          { I.clocking = i.clocking; read_bits = mux2 read (of_int ~width:5 8) (zero 5) })
+          { I.clocking = i.clocking
+          ; read_bits = mux2 read (of_int_trunc ~width:5 8) (zero 5)
+          })
     in
     let decoder =
       Decoder.(
@@ -50,7 +52,7 @@ struct
           ; bits_valid = vdd
           })
     in
-    read <== decoder.read_bits;
+    read <-- decoder.read_bits;
     { O.fields = decoder.fields; done_ = decoder.done_ }
   ;;
 

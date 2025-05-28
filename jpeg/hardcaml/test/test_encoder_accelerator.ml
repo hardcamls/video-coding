@@ -4,7 +4,7 @@ open Hardcaml_waveterm
 module Encoder = Hardcaml_jpeg.Encoder_datapath
 module Sim = Cyclesim.With_interface (Encoder.I) (Encoder.O)
 
-let ( <--. ) a b = a := Bits.of_int ~width:(Bits.width !a) b
+let ( <--. ) a b = a := Bits.of_int_trunc ~width:(Bits.width !a) b
 let qtable = Hardcaml_jpeg_model.Quant_tables.(scale luma 95)
 
 let%expect_test "quant values" =
@@ -38,9 +38,9 @@ let test ?(waves = false) () =
   (* load quantisation table *)
   inputs.quant_write.write <--. 1;
   Array.iteri qtable ~f:(fun addr q ->
-      inputs.quant_write.quant <--. Hardcaml_jpeg.Quant.one_over_quant_coef q;
-      inputs.quant_write.address <--. addr;
-      Cyclesim.cycle sim);
+    inputs.quant_write.quant <--. Hardcaml_jpeg.Quant.one_over_quant_coef q;
+    inputs.quant_write.address <--. addr;
+    Cyclesim.cycle sim);
   inputs.quant_write.write <--. 0;
   let start block dct vlc =
     inputs.starts.dct := Bits.of_bool dct;
@@ -50,9 +50,9 @@ let test ?(waves = false) () =
     inputs.starts.vlc := Bits.gnd;
     inputs.pixels.write_enable := Bits.vdd;
     Array.iteri block ~f:(fun address data ->
-        inputs.pixels.write_address <--. address;
-        inputs.pixels.data <--. data;
-        Cyclesim.cycle sim);
+      inputs.pixels.write_address <--. address;
+      inputs.pixels.data <--. data;
+      Cyclesim.cycle sim);
     while not (Bits.to_bool !(outputs.done_)) do
       Cyclesim.cycle sim
     done;

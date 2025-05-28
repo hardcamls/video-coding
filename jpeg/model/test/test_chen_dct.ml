@@ -1,8 +1,10 @@
 (* Test forward and inverse Chen DCTs against a reference float DCT *)
 open Core
 
+let () = Random4.set_state (Random4.State.make [| 111; 222; 333 |])
+
 let forward () =
-  let input = Array.init 64 ~f:(fun _ -> Random.int 256 - 128) in
+  let input = Array.init 64 ~f:(fun _ -> Random4.int 256 - 128) in
   let fdct = Array.copy input in
   Hardcaml_jpeg_model.Dct.Chen.forward_8x8 fdct;
   input, fdct
@@ -22,12 +24,12 @@ let forward_and_inverse_transform () =
 
 let check_accuracy ~input ~idct =
   Array.iter2_exn input idct ~f:(fun a b ->
-      let b = Float.of_int b /. 4. in
-      let b = Float.round_nearest b |> Float.to_int in
-      (* a tolerance of 2 seems to work. Thats fine - the accuracy of the IDCT
+    let b = Float.of_int b /. 4. in
+    let b = Float.round_nearest b |> Float.to_int in
+    (* a tolerance of 2 seems to work. Thats fine - the accuracy of the IDCT
          is more important, and I think is better than this. *)
-      if Int.abs (a - b) > 2
-      then raise_s [%message (a : int) (b : int) (input : int array) (idct : int array)])
+    if Int.abs (a - b) > 2
+    then raise_s [%message (a : int) (b : int) (input : int array) (idct : int array)])
 ;;
 
 let test_chen_transform () =

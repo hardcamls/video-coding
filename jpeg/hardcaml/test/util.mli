@@ -7,8 +7,7 @@ val extract_next_marker : start_pos:int -> marker_code:int -> String.t -> String
 val extract_next_marker_exn : start_pos:int -> marker_code:int -> String.t -> String.t
 val find_nth_marker_exn : n:int -> marker_code:int -> String.t -> String.t
 
-(** Decode JPEG header and return entropy coded segment processed to remove 
-    stuffed bytes. *)
+(** Decode JPEG header and return entropy coded segment processed to remove stuffed bytes. *)
 val headers_and_entropy_coded_segment
   :  string
   -> Hardcaml_jpeg_model.Decoder.Header.t * String.t
@@ -17,7 +16,7 @@ val remove_stuffing_bytes : String.t -> String.t
 val mouse480 : string
 val load_jpeg_file : string -> Hardcaml_video_common.Bitstream_reader.From_string.t
 
-(** {2 Easy to use bitstream reader module for testbenches.}*)
+(** {2 Easy to use bitstream reader module for testbenches.} *)
 
 open Hardcaml
 open Hardcaml_jpeg
@@ -39,7 +38,9 @@ module Super_simple_bitstream_reader : sig
   val hierarchical : bits:String.t -> Scope.t -> Interface.Create_fn(I)(O).t
 end
 
-module Wrapped_marker_decoder (Fields : Interface.S) (D : Fields_decoder.M(Fields).S) : sig
+module Wrapped_marker_decoder
+    (Fields : Interface.S)
+    (_ : Fields_decoder.M(Fields).S) : sig
   module I : sig
     type 'a t =
       { clocking : 'a Clocking.t

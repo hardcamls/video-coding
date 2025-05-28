@@ -15,10 +15,10 @@ let marker_length bits ~pos =
 let find_next_marker ~start_pos ~marker_code bits =
   let marker = Char.of_int_exn marker_code in
   With_return.with_return_option (fun r ->
-      for pos = start_pos to String.length bits - 2 do
-        if Char.equal bits.[pos] '\xff' && Char.equal bits.[pos + 1] marker
-        then r.return pos
-      done)
+    for pos = start_pos to String.length bits - 2 do
+      if Char.equal bits.[pos] '\xff' && Char.equal bits.[pos + 1] marker
+      then r.return pos
+    done)
 ;;
 
 let find_next_marker_exn ~start_pos ~marker_code bits =
@@ -28,9 +28,9 @@ let find_next_marker_exn ~start_pos ~marker_code bits =
 let extract_next_marker ~start_pos ~marker_code bits =
   let pos = find_next_marker ~start_pos ~marker_code bits in
   Option.map pos ~f:(fun pos ->
-      let pos = pos + 2 in
-      let len = marker_length bits ~pos in
-      String.sub ~pos ~len bits)
+    let pos = pos + 2 in
+    let len = marker_length bits ~pos in
+    String.sub ~pos ~len bits)
 ;;
 
 let extract_next_marker_exn ~start_pos ~marker_code bits =
@@ -104,10 +104,8 @@ module Super_simple_bitstream_reader = struct
   let create ~bits _scope { I.clocking; read_bits } =
     let bits = String.to_list bits |> List.map ~f:of_char |> concat_msb in
     let bits =
-      reg_fb
-        (Reg_spec.override (Clocking.to_spec clocking) ~clear_to:bits)
-        ~width:(width bits)
-        ~f:(fun d -> log_shift sll d read_bits)
+      reg_fb (Clocking.to_spec clocking) ~clear_to:bits ~width:(width bits) ~f:(fun d ->
+        log_shift ~f:sll d ~by:read_bits)
     in
     { O.bits = bits.:-[None, 16] }
   ;;
@@ -144,7 +142,7 @@ struct
         ~bits
         scope
         { Super_simple_bitstream_reader.I.clocking = i.clocking
-        ; read_bits = mux2 read_bits (of_int ~width:5 8) (zero 5)
+        ; read_bits = mux2 read_bits (of_unsigned_int ~width:5 8) (zero 5)
         }
     in
     let decoder =
@@ -156,7 +154,7 @@ struct
         ; bits_valid = vdd
         }
     in
-    read_bits <== decoder.read_bits;
+    read_bits <-- decoder.read_bits;
     { O.fields = decoder.fields; done_ = decoder.done_ }
   ;;
 
@@ -196,53 +194,53 @@ struct
   ;;
 end
 
-let ( <--. ) a b = a := Bits.of_int ~width:(Bits.width !a) b
+let ( <--. ) a b = a := Bits.of_int_trunc ~width:(Bits.width !a) b
 
 let load_huffman_tables
-    ~cycle
-    (dht : Bits.t ref Hardcaml_jpeg.Markers.Dht.Fields.t)
-    (huffman_tables : Hardcaml_jpeg_model.Markers.Dht.t list)
+  ~cycle
+  (dht : Bits.t ref Hardcaml_jpeg.Markers.Dht.Fields.t)
+  (huffman_tables : Hardcaml_jpeg_model.Markers.Dht.t list)
   =
   List.iter huffman_tables ~f:(fun t ->
-      let lengths = t.lengths in
-      dht.header.destination_identifier <--. t.destination_identifier;
-      dht.header.table_class <--. t.table_class;
-      let pos = ref 0 in
-      let code = ref 0 in
-      dht.code.code_write := Bits.vdd;
-      for i = 0 to Array.length lengths - 1 do
-        dht.code.code_base_address <--. !pos;
-        dht.code.code_length_minus1 <--. i;
-        dht.code.num_codes_at_length <--. lengths.(i);
-        dht.code.code <--. !code;
-        code := (!code + lengths.(i)) lsl 1;
-        pos := !pos + lengths.(i);
-        cycle ()
-      done;
-      dht.code.code_write := Bits.gnd;
-      dht.code_data.data_write := Bits.vdd;
-      for i = 0 to Array.length t.values - 1 do
-        dht.code_data.data_address <--. i;
-        dht.code_data.data <--. t.values.(i);
-        cycle ()
-      done;
-      dht.code_data.data_write := Bits.gnd)
+    let lengths = t.lengths in
+    dht.header.destination_identifier <--. t.destination_identifier;
+    dht.header.table_class <--. t.table_class;
+    let pos = ref 0 in
+    let code = ref 0 in
+    dht.code.code_write := Bits.vdd;
+    for i = 0 to Array.length lengths - 1 do
+      dht.code.code_base_address <--. !pos;
+      dht.code.code_length_minus1 <--. i;
+      dht.code.num_codes_at_length <--. lengths.(i);
+      dht.code.code <--. !code;
+      code := (!code + lengths.(i)) lsl 1;
+      pos := !pos + lengths.(i);
+      cycle ()
+    done;
+    dht.code.code_write := Bits.gnd;
+    dht.code_data.data_write := Bits.vdd;
+    for i = 0 to Array.length t.values - 1 do
+      dht.code_data.data_address <--. i;
+      dht.code_data.data <--. t.values.(i);
+      cycle ()
+    done;
+    dht.code_data.data_write := Bits.gnd)
 ;;
 
 let load_quant_tables
-    ~cycle
-    (dqt : Bits.t ref Hardcaml_jpeg.Markers.Dqt.Fields.t)
-    (quant_tables : Hardcaml_jpeg_model.Markers.Dqt.t list)
+  ~cycle
+  (dqt : Bits.t ref Hardcaml_jpeg.Markers.Dqt.Fields.t)
+  (quant_tables : Hardcaml_jpeg_model.Markers.Dqt.t list)
   =
   List.iter quant_tables ~f:(fun t ->
-      dqt.fields.table_identifier <--. t.table_identifier;
-      dqt.element_write := Bits.vdd;
-      for i = 0 to Array.length t.elements - 1 do
-        dqt.element_address <--. i;
-        dqt.element <--. t.elements.(i);
-        cycle ()
-      done;
-      dqt.element_write := Bits.gnd)
+    dqt.fields.table_identifier <--. t.table_identifier;
+    dqt.element_write := Bits.vdd;
+    for i = 0 to Array.length t.elements - 1 do
+      dqt.element_address <--. i;
+      dqt.element <--. t.elements.(i);
+      cycle ()
+    done;
+    dqt.element_write := Bits.gnd)
 ;;
 
 let reconstruct ~block_number frame pixels =

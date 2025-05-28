@@ -3,11 +3,13 @@ open Core
 open Hardcaml
 open Hardcaml_waveterm
 
-module Make (Config : sig
-  include Hardcaml_jpeg.Dct.Config
+let () = Random4.set_state (Random4.State.make [| 111; 222; 333 |])
 
-  val test_range : int
-end) =
+module Make (Config : sig
+    include Hardcaml_jpeg.Dct.Config
+
+    val test_range : int
+  end) =
 struct
   module Dct = Hardcaml_jpeg.Dct.Make (Config)
 
@@ -32,8 +34,7 @@ struct
   let create_inputs () =
     let inputs =
       Array.init 8 ~f:(fun _ ->
-          Array.init 8 ~f:(fun _ ->
-              Random.int (Config.test_range * 2) - Config.test_range))
+        Array.init 8 ~f:(fun _ -> Random4.int (Config.test_range * 2) - Config.test_range))
     in
     inputs
   ;;
@@ -56,26 +57,30 @@ struct
     let cycle () =
       let waddr = !(outputs.write_address) in
       (if Bits.to_bool !(outputs.transpose_write)
-      then
-        Bits.(
-          transpose.(Bits.to_int waddr.:[5, 3]).(Bits.to_int waddr.:[2, 0])
-            <- Bits.to_sint !(outputs.transpose_coef_out)));
+       then
+         Bits.(
+           transpose.(Bits.to_int_trunc waddr.:[5, 3]).(Bits.to_int_trunc waddr.:[2, 0])
+           <- Bits.to_signed_int !(outputs.transpose_coef_out)));
       (if Bits.to_bool !(outputs.coef_out_write)
-      then
-        Bits.(
-          pixels.(Bits.to_int waddr.:[5, 3]).(Bits.to_int waddr.:[2, 0])
-            <- Bits.to_sint !(outputs.coef_out)));
+       then
+         Bits.(
+           pixels.(Bits.to_int_trunc waddr.:[5, 3]).(Bits.to_int_trunc waddr.:[2, 0])
+           <- Bits.to_signed_int !(outputs.coef_out)));
       let raddr = !(outputs.read_address) in
       let renc = !(outputs.coef_in_read) in
       let rent = !(outputs.transpose_read) in
       Cyclesim.cycle sim;
-      let row, col = Bits.(to_int raddr.:[5, 3]), Bits.(to_int raddr.:[2, 0]) in
+      let row, col =
+        Bits.(to_int_trunc raddr.:[5, 3]), Bits.(to_int_trunc raddr.:[2, 0])
+      in
       if Bits.to_bool renc
-      then inputs.coef_in := Bits.of_int ~width:Config.input_bits dct_inputs.(row).(col);
+      then
+        inputs.coef_in
+        := Bits.of_int_trunc ~width:Config.input_bits dct_inputs.(row).(col);
       if Bits.to_bool rent
       then
         inputs.transpose_coef_in
-          := Bits.of_int ~width:Dct.transpose_bits transpose.(row).(col)
+        := Bits.of_int_trunc ~width:Dct.transpose_bits transpose.(row).(col)
     in
     inputs.start := Bits.vdd;
     cycle ();
@@ -130,10 +135,10 @@ end
 
 module Dct = struct
   module Dct = Make (struct
-    include Hardcaml_jpeg.Dct.Dct_config
+      include Hardcaml_jpeg.Dct.Dct_config
 
-    let test_range = 128
-  end)
+      let test_range = 128
+    end)
 
   open Dct
 
@@ -248,12 +253,14 @@ module Dct = struct
   ;;
 end
 
+let () = Random4.set_state (Random4.State.make [| 111; 222; 333 |])
+
 module Idct = struct
   module Idct = Make (struct
-    include Hardcaml_jpeg.Dct.Idct_config
+      include Hardcaml_jpeg.Dct.Idct_config
 
-    let test_range = 200
-  end)
+      let test_range = 200
+    end)
 
   open Idct
 
